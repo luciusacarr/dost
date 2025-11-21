@@ -746,6 +746,7 @@ PipelineInputList GetGeneratedPipelineInput(const PipelineOptions &values) {
     std::default_random_engine attitudeRng(seed);
     std::default_random_engine noiseRng(seed);
 
+
     // TODO: allow random angle generation?
     Attitude attitude = Attitude(SphericalToQuaternion(DegToRad(values.generateRa),
                                                        DegToRad(values.generateDe),
@@ -917,6 +918,7 @@ PipelineOutput Pipeline::Go(const PipelineInput &input) {
     PipelineOutput result;
 
     const Image *inputImage = input.InputImage();
+
     const Stars *inputStars = input.InputStars();
     const StarIdentifiers *inputStarIds = input.InputStarIds();
 
@@ -936,6 +938,8 @@ PipelineOutput Pipeline::Go(const PipelineInput &input) {
     }
 
     if (centroidAlgorithm && inputImage) {
+
+        std::cout << "Running centroiding algorithm..." << std::endl;
 
         // run centroiding, keeping track of the time it takes
         std::chrono::time_point<std::chrono::steady_clock> start = std::chrono::steady_clock::now();
@@ -976,6 +980,8 @@ PipelineOutput Pipeline::Go(const PipelineInput &input) {
     } else if (centroidAlgorithm) {
         std::cerr << "ERROR: Centroid algorithm specified, but no input image to run it on." << std::endl;
         exit(1);
+    } else {
+        std::cout << "Issue found..." << std::endl;
     }
 
     if (starIdAlgorithm && database && inputStars && input.InputCamera()) {
@@ -993,6 +999,8 @@ PipelineOutput Pipeline::Go(const PipelineInput &input) {
         std::cerr << "ERROR: Star ID algorithm specified but cannot run because database, centroids, or camera are missing." << std::endl;
         exit(1);
     }
+
+
 
     if (attitudeEstimationAlgorithm && inputStarIds && input.InputCamera()) {
         assert(inputStars); // ensure that starIds doesn't exist without stars

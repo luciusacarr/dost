@@ -74,9 +74,11 @@ $(BIN): $(OBJS)
 
 # NEW: Live Debug Program -------------------------------
 # Builds: lost-livedebug
-$(LIVEDEBUG_TARGET): CXXFLAGS += -fsanitize=address
-$(LIVEDEBUG_TARGET): $(LIVEDEBUG_OBJS) $(filter-out src/main.o, $(SRC_OBJS))
-	$(CXX) $(CXXFLAGS) -o $@ $(filter-out src/main.o, $(SRC_OBJS)) $(LIVEDEBUG_OBJS) $(LDFLAGS)
+$(SUBSYS_LIVE_BIN): CXXFLAGS += -fsanitize=address
+$(SUBSYS_LIVE_BIN): $(SUBSYS_LIVE_OBJS) $(filter-out src/main.o, $(OBJS))
+	$(CXX) $(CXXFLAGS) -o $@ $(filter-out src/main.o, $(OBJS)) $(SUBSYS_LIVE_OBJS) $(SFML_LIBS) $(LIBS) $(LDFLAGS)
+livedebug: $(SUBSYS_LIVE_BIN)
+
 
 # Manpage conversion ------------------------------------
 documentation/%.txt: documentation/%.man
