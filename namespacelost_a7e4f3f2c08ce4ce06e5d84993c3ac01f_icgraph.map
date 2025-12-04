@@ -1,0 +1,15 @@
+<map id="lost::BscParse" name="lost::BscParse">
+<area shape="rect" id="Node000001" title="Parse the bright star catalog from the TSV file on disk." alt="" coords="704,38,816,63"/>
+<area shape="rect" id="Node000002" href="$namespacelost.html#a41f5bb669129790c12bd70e1d641441f" title="Read and parse the full catalog from disk. If called multiple times, will re&#45;use the first result." alt="" coords="490,62,627,87"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="690,62,628,69,627,64,690,56"/>
+<area shape="rect" id="Node000006" href="$namespacelost.html#a5fcec42fe5685095931e646f943061ae" title="Clone of the CatalogRead function, but allows specifying a different catalog file path." alt="" coords="461,13,656,38"/>
+<area shape="poly" id="edge6_Node000001_Node000006" title=" " alt="" coords="690,45,656,40,657,35,691,39"/>
+<area shape="rect" id="Node000003" href="$namespacelost.html#aec3a2012bf028c749ba53a46a50ad172" title="Create a GeneratedPipelineInput based on the command line options in values" alt="" coords="216,5,413,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="481,62,413,48,414,43,483,57"/>
+<area shape="rect" id="Node000005" href="$namespacelost.html#a72e465adc8dcb532e46b956261bf93fe" title="Create a PngPipelineInput using command line options." alt="" coords="221,70,408,95"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="476,80,408,82,408,77,475,75"/>
+<area shape="rect" id="Node000004" href="$namespacelost.html#ad01d904e4a6bf5aed4a1b8f97f1416c5" title="Come up with a list of pipeline inputs based on command line options." alt="" coords="5,42,168,67"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="203,42,168,47,168,42,202,37"/>
+<area shape="poly" id="edge5_Node000005_Node000004" title=" " alt="" coords="207,72,168,67,169,62,208,67"/>
+<area shape="poly" id="edge7_Node000006_Node000003" title=" " alt="" coords="448,28,414,28,414,23,448,23"/>
+</map>

@@ -1,0 +1,7 @@
+<map id="lost::specifiedCatalogRead" name="lost::specifiedCatalogRead">
+<area shape="rect" id="Node000001" title="Clone of the CatalogRead function, but allows specifying a different catalog file path." alt="" coords="461,13,656,38"/>
+<area shape="rect" id="Node000002" href="$namespacelost.html#aec3a2012bf028c749ba53a46a50ad172" title="Create a GeneratedPipelineInput based on the command line options in values" alt="" coords="216,5,413,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="448,28,414,28,414,23,448,23"/>
+<area shape="rect" id="Node000003" href="$namespacelost.html#ad01d904e4a6bf5aed4a1b8f97f1416c5" title="Come up with a list of pipeline inputs based on command line options." alt="" coords="5,13,168,38"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="202,28,168,28,168,23,202,23"/>
+</map>

@@ -1,0 +1,25 @@
+var dir_68267d1309a1af8e8297ef4c3efbcdba =
+[
+    [ "attitude-estimators.cpp", "attitude-estimators_8cpp.html", "attitude-estimators_8cpp" ],
+    [ "attitude-estimators.hpp", "attitude-estimators_8hpp.html", "attitude-estimators_8hpp" ],
+    [ "attitude-utils.cpp", "attitude-utils_8cpp.html", "attitude-utils_8cpp" ],
+    [ "attitude-utils.hpp", "attitude-utils_8hpp.html", "attitude-utils_8hpp" ],
+    [ "camera.cpp", "camera_8cpp.html", "camera_8cpp" ],
+    [ "camera.hpp", "camera_8hpp.html", "camera_8hpp" ],
+    [ "centroiders.cpp", "centroiders_8cpp.html", "centroiders_8cpp" ],
+    [ "centroiders.hpp", "centroiders_8hpp.html", "centroiders_8hpp" ],
+    [ "database-options.hpp", "database-options_8hpp.html", null ],
+    [ "databases.cpp", "databases_8cpp.html", "databases_8cpp" ],
+    [ "databases.hpp", "databases_8hpp.html", "databases_8hpp" ],
+    [ "decimal.hpp", "decimal_8hpp.html", "decimal_8hpp" ],
+    [ "io.cpp", "io_8cpp.html", "io_8cpp" ],
+    [ "io.hpp", "io_8hpp.html", "io_8hpp" ],
+    [ "main.cpp", "main_8cpp.html", "main_8cpp" ],
+    [ "pipeline-options.hpp", "pipeline-options_8hpp.html", null ],
+    [ "serialize-helpers.hpp", "serialize-helpers_8hpp.html", "serialize-helpers_8hpp" ],
+    [ "star-id-private.hpp", "star-id-private_8hpp.html", "star-id-private_8hpp" ],
+    [ "star-id.cpp", "star-id_8cpp.html", "star-id_8cpp" ],
+    [ "star-id.hpp", "star-id_8hpp.html", "star-id_8hpp" ],
+    [ "star-utils.cpp", "star-utils_8cpp.html", "star-utils_8cpp" ],
+    [ "star-utils.hpp", "star-utils_8hpp.html", "star-utils_8hpp" ]
+];

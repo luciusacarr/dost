@@ -1,0 +1,26 @@
+<map id="lost::DegToRad" name="lost::DegToRad">
+<area shape="rect" id="Node000001" title=" " alt="" coords="955,107,1073,132"/>
+<area shape="rect" id="Node000002" href="$namespacelost.html#a0bf2bbf8b3bc82f9647c9f327d1369de" title=" " alt="" coords="747,5,884,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="983,101,947,76,906,52,858,33,860,28,908,48,950,72,986,96"/>
+<area shape="rect" id="Node000003" href="$namespacelost.html#a7e4f3f2c08ce4ce06e5d84993c3ac01f" title="Parse the bright star catalog from the TSV file on disk." alt="" coords="759,107,871,132"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="941,122,872,122,872,117,941,117"/>
+<area shape="rect" id="Node000005" href="$namespacelost.html#aec3a2012bf028c749ba53a46a50ad172" title="Create a GeneratedPipelineInput based on the command line options in values" alt="" coords="216,121,413,161"/>
+<area shape="poly" id="edge14_Node000001_Node000005" title=" " alt="" coords="956,106,906,97,781,83,684,76,586,80,462,97,412,108,366,123,365,118,411,103,461,91,586,75,684,71,782,77,907,91,957,101"/>
+<area shape="rect" id="Node000009" href="$namespacelost.html#a2788319f0c0f74fbd29f5249501482be" title="Calculate the focal length, in pixels, based on the given command line options." alt="" coords="461,205,676,231"/>
+<area shape="poly" id="edge10_Node000001_Node000009" title=" " alt="" coords="948,138,907,147,631,208,630,203,906,142,947,133"/>
+<area shape="rect" id="Node000010" href="$namespacelost.html#ac0ac19dd0e9f2f1ce471617d9c837949" title="Appropriately create descriptors for all requested databases according to command&#45;line options." alt="" coords="724,208,907,233"/>
+<area shape="poly" id="edge13_Node000001_Node000010" title=" " alt="" coords="986,143,950,167,908,191,860,210,858,205,906,186,947,163,983,138"/>
+<area shape="rect" id="Node000004" href="$namespacelost.html#a41f5bb669129790c12bd70e1d641441f" title="Read and parse the full catalog from disk. If called multiple times, will re&#45;use the first result." alt="" coords="500,156,637,181"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="747,136,633,159,632,153,746,130"/>
+<area shape="rect" id="Node000008" href="$namespacelost.html#a5fcec42fe5685095931e646f943061ae" title="Clone of the CatalogRead function, but allows specifying a different catalog file path." alt="" coords="471,107,666,132"/>
+<area shape="poly" id="edge8_Node000003_Node000008" title=" " alt="" coords="746,122,666,122,666,117,746,117"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="486,162,413,154,414,149,487,157"/>
+<area shape="rect" id="Node000007" href="$namespacelost.html#a72e465adc8dcb532e46b956261bf93fe" title="Create a PngPipelineInput using command line options." alt="" coords="221,185,408,211"/>
+<area shape="poly" id="edge6_Node000004_Node000007" title=" " alt="" coords="487,181,408,190,408,185,486,175"/>
+<area shape="rect" id="Node000006" href="$namespacelost.html#ad01d904e4a6bf5aed4a1b8f97f1416c5" title="Come up with a list of pipeline inputs based on command line options." alt="" coords="5,157,168,183"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="203,158,168,162,168,157,202,152"/>
+<area shape="poly" id="edge7_Node000007_Node000006" title=" " alt="" coords="207,187,168,183,169,177,208,182"/>
+<area shape="poly" id="edge9_Node000008_Node000005" title=" " alt="" coords="458,131,414,135,413,130,458,126"/>
+<area shape="poly" id="edge11_Node000009_Node000005" title=" " alt="" coords="489,205,460,197,412,176,376,163,377,158,414,172,462,191,491,200"/>
+<area shape="poly" id="edge12_Node000009_Node000007" title=" " alt="" coords="447,211,408,208,409,203,448,206"/>
+</map>

@@ -1,0 +1,28 @@
+<map id="lost::GetGeneratedPipelineInput" name="lost::GetGeneratedPipelineInput">
+<area shape="rect" id="Node000001" title="Create a GeneratedPipelineInput based on the command line options in values" alt="" coords="5,134,203,174"/>
+<area shape="rect" id="Node000002" href="$namespacelost.html#a41f5bb669129790c12bd70e1d641441f" title="Read and parse the full catalog from disk. If called multiple times, will re&#45;use the first result." alt="" coords="289,65,427,90"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="158,131,250,101,285,91,286,96,251,106,160,136"/>
+<area shape="rect" id="Node000004" href="$namespacelost.html#a543c802e0faa7d19b8bfb148573309fe" title=" " alt="" coords="756,14,875,40"/>
+<area shape="poly" id="edge7_Node000001_Node000004" title=" " alt="" coords="125,132,178,89,213,67,250,50,315,30,382,16,451,8,518,4,643,6,743,14,742,19,643,11,518,9,451,13,383,22,316,35,252,55,215,72,182,93,128,136"/>
+<area shape="rect" id="Node000005" href="$namespacelost.html#a9af0427ae10a3db5529f2f8c74497347" title=" " alt="" coords="731,141,900,166"/>
+<area shape="poly" id="edge13_Node000001_Node000005" title=" " alt="" coords="156,171,202,187,251,199,372,222,467,236,513,237,562,234,682,214,736,195,782,171,784,176,738,200,683,219,563,240,513,243,467,241,371,228,250,204,201,192,155,176"/>
+<area shape="rect" id="Node000006" href="$namespacelost.html#a2788319f0c0f74fbd29f5249501482be" title="Calculate the focal length, in pixels, based on the given command line options." alt="" coords="251,116,465,141"/>
+<area shape="poly" id="edge8_Node000001_Node000006" title=" " alt="" coords="203,141,237,138,237,143,203,147"/>
+<area shape="rect" id="Node000008" href="$namespacelost.html#a5fcec42fe5685095931e646f943061ae" title="Clone of the CatalogRead function, but allows specifying a different catalog file path." alt="" coords="261,165,455,190"/>
+<area shape="poly" id="edge14_Node000001_Node000008" title=" " alt="" coords="203,160,247,165,247,170,203,166"/>
+<area shape="rect" id="Node000009" href="$namespacelost.html#a562a86693dfa8ef7024526934fbfa8bb" title="Return a quaternion that will reorient the coordinate axes so that the x&#45;axis points at the given rig..." alt="" coords="258,318,458,344"/>
+<area shape="poly" id="edge17_Node000001_Node000009" title=" " alt="" coords="122,172,175,234,212,268,252,297,285,312,282,317,249,301,208,272,171,237,118,175"/>
+<area shape="rect" id="Node000003" href="$namespacelost.html#a7e4f3f2c08ce4ce06e5d84993c3ac01f" title="Parse the bright star catalog from the TSV file on disk." alt="" coords="542,65,654,90"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="427,75,528,75,528,80,427,80"/>
+<area shape="poly" id="edge6_Node000002_Node000005" title=" " alt="" coords="397,62,454,48,526,37,606,35,645,40,684,50,717,65,748,86,795,129,792,133,745,90,714,70,682,55,644,45,605,40,527,42,455,53,399,68"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="653,62,747,40,748,45,654,68"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="636,88,766,134,764,139,634,93"/>
+<area shape="poly" id="edge5_Node000005_Node000005" title=" " alt="" coords="780,143,772,133,776,123,791,117,815,114,845,118,857,127,854,131,843,123,815,120,792,122,780,127,778,132,784,139"/>
+<area shape="poly" id="edge9_Node000006_Node000004" title=" " alt="" coords="432,113,464,99,478,88,487,75,496,62,512,50,570,30,631,19,690,16,742,17,742,22,690,21,631,24,571,35,515,55,500,65,491,78,482,91,467,104,434,118"/>
+<area shape="poly" id="edge12_Node000006_Node000005" title=" " alt="" coords="466,132,717,146,717,151,465,137"/>
+<area shape="rect" id="Node000007" href="$namespacelost.html#a000f9bcbfc18aa202849ef43a455cb20" title=" " alt="" coords="513,166,683,192"/>
+<area shape="poly" id="edge10_Node000006_Node000007" title=" " alt="" coords="420,139,525,161,524,166,419,144"/>
+<area shape="poly" id="edge11_Node000007_Node000005" title=" " alt="" coords="683,167,717,162,718,168,683,172"/>
+<area shape="poly" id="edge15_Node000008_Node000003" title=" " alt="" coords="424,162,464,150,519,124,565,96,568,100,521,128,466,155,426,168"/>
+<area shape="poly" id="edge16_Node000008_Node000005" title=" " alt="" coords="414,188,470,198,537,205,610,207,682,200,731,187,775,169,777,174,733,192,683,206,610,213,537,211,469,203,413,193"/>
+</map>
