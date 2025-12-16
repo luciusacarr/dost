@@ -761,7 +761,10 @@ static int LostMain(int argc, char **argv) {
                     sf::Text starText;
                     starText.setFont(font);
                     if (pairindex + 1 >= 0 && pairindex + 1 < (int)starsNames.size()) {
-                        starText.setString(std::to_string(pairindex) + starsNames[pairindex + 1]);
+                        starText.setString(std::to_string(pairindex) + starsNames[pairindex]);
+                        std::cout << "Displaying star name: " << starsNames[pairindex] << "\n";
+                        // print pair index
+                        std::cout << "Star index: " << pairindex << "\n";
                     } else {
                         starText.setString(std::to_string(pairindex) + " ?");
                     } //  Have not studied the database to show that the correct names will be used all the time. the +1 is to exclude Sol.
