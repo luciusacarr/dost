@@ -30,6 +30,8 @@
 
 #include <SFML/Graphics.hpp>
 
+#include <sfml-utils.hpp>
+
 
 // Used to store frame data.
 struct dost_ImgData {
@@ -535,18 +537,30 @@ static int LostMain(int argc, char **argv) {
         text.setFont(font);
         text.setString("Attitude is UNKNOWN");
 
-        if (imgData[image_idx].attitude.IsKnown()) {
-            EulerAngles spherical = imgData[image_idx].attitude.ToSpherical();
 
-            // setstring to attitude
-            text.setString(
-                "RA: " + std::to_string(RadToDeg(spherical.ra)) +
-                " DE: " + std::to_string(RadToDeg(spherical.de)) +
-                " Roll: " + std::to_string(RadToDeg(spherical.roll))
-            );
+        auto UpdateHUD = [&](int idx) {
+                if (imgData[idx].attitude.IsKnown()) {
+                    EulerAngles s = imgData[idx].attitude.ToSpherical();
+                    text.setString(
+                        "RA: " + std::to_string(RadToDeg(s.ra)) +
+                        " DE: " + std::to_string(RadToDeg(s.de)) +
+                        " Roll: " + std::to_string(RadToDeg(s.roll))
+                    );
+                } else {
+                    text.setString("Attitude is UNKNOWN");
+                }
+            };
 
-        } else {
-                std::cout << "Attitude is UNKNOWN";
+
+        UpdateHUD(image_idx);
+
+        std::vector<int> starToCatalogIndex;
+
+        starToCatalogIndex.assign(imgData[image_idx].stars.size(), -1); // Fill with -1
+        for (auto& pair : imgData[image_idx].starIds) {
+            if (pair.first >= 0 && pair.first < (int)starToCatalogIndex.size()) {
+                starToCatalogIndex[pair.first] = pair.second;
+            }
         }
 
         decimal ra = pipelineOptions.generateRa;
@@ -563,6 +577,8 @@ static int LostMain(int argc, char **argv) {
         const float margin = 6.f;
         text.setPosition(margin, margin);
 
+
+        
         // --------------------------------------
         // Main loop
         // --------------------------------------
@@ -579,18 +595,14 @@ static int LostMain(int argc, char **argv) {
                     if (event.key.code == sf::Keyboard::Right) {
                         image_idx = (image_idx + 1) % sprites.size();     // forward wrap
 
-                        if (imgData[image_idx].attitude.IsKnown()) {
-                            EulerAngles spherical = imgData[image_idx].attitude.ToSpherical();
+                        UpdateHUD(image_idx);
 
-                            // setstring to attitude
-                            text.setString(
-                                "RA: " + std::to_string(RadToDeg(spherical.ra)) +
-                                " DE: " + std::to_string(RadToDeg(spherical.de)) +
-                                " Roll: " + std::to_string(RadToDeg(spherical.roll))
-                            );
 
-                        } else {
-                            text.setString("Attitude is UNKNOWN");
+                        starToCatalogIndex.assign(imgData[image_idx].stars.size(), -1); // Fill with -1
+                        for (auto& pair : imgData[image_idx].starIds) {
+                            if (pair.first >= 0 && pair.first < (int)starToCatalogIndex.size()) {
+                                starToCatalogIndex[pair.first] = pair.second;
+                            }
                         }
 
 
@@ -598,18 +610,14 @@ static int LostMain(int argc, char **argv) {
                     if (event.key.code == sf::Keyboard::Left) {
                         image_idx = (image_idx - 1 + sprites.size()) % sprites.size(); // backward wrap
 
-                        if (imgData[image_idx].attitude.IsKnown()) {
-                            EulerAngles spherical = imgData[image_idx].attitude.ToSpherical();
+                        UpdateHUD(image_idx);
 
-                            // setstring to attitude
-                            text.setString(
-                                "RA: " + std::to_string(RadToDeg(spherical.ra)) +
-                                " DE: " + std::to_string(RadToDeg(spherical.de)) +
-                                " Roll: " + std::to_string(RadToDeg(spherical.roll))
-                            );
 
-                        } else {
-                            text.setString("Attitude is UNKNOWN");
+                        starToCatalogIndex.assign(imgData[image_idx].stars.size(), -1); // Fill with -1
+                        for (auto& pair : imgData[image_idx].starIds) {
+                            if (pair.first >= 0 && pair.first < (int)starToCatalogIndex.size()) {
+                                starToCatalogIndex[pair.first] = pair.second;
+                            }
                         }
 
                     }
@@ -625,7 +633,7 @@ static int LostMain(int argc, char **argv) {
                         ra -= 2.0f*(event.key.code == sf::Keyboard::A ? -1.0f : 0.0f) + 2.0f*(event.key.code == sf::Keyboard::D ? 1.0f : 0.0f);
                         if (ra > 360.0f) ra -= 360.0f;
                         if (ra < 0.0f) ra += 360.0f;
-                        de -= 2.0f*(event.key.code == sf::Keyboard::W ? 1.0f : 0.0f) + 2.0f*(event.key.code == sf::Keyboard::S ? -1.0f : 0.0f);
+                        de += 2.0f*(event.key.code == sf::Keyboard::W ? 1.0f : 0.0f) + 2.0f*(event.key.code == sf::Keyboard::S ? -1.0f : 0.0f);
                         if (de > 90.0f) de = 90.0f;
                         if (de < -90.0f) de = -90.0f;
                         roll += 5.0f*(event.key.code == sf::Keyboard::Q ? -1.0f : 0.0f) + 5.0f*(event.key.code == sf::Keyboard::E ? 1.0f : 0.0f);
@@ -669,21 +677,16 @@ static int LostMain(int argc, char **argv) {
 
                         image_idx = sprites.size()-1;     // we need to go forward to new image.
 
-                        if (imgData[image_idx].attitude.IsKnown()) {
-                            EulerAngles spherical = imgData[image_idx].attitude.ToSpherical();
 
-                            // setstring to attitude
-                            text.setString(
-                                "RA: " + std::to_string(RadToDeg(spherical.ra)) +
-                                " DE: " + std::to_string(RadToDeg(spherical.de)) +
-                                " Roll: " + std::to_string(RadToDeg(spherical.roll))
-                            );
 
-                        } else {
-                            text.setString("Attitude is UNKNOWN");
+                        UpdateHUD(image_idx);
+
+                        starToCatalogIndex.assign(imgData[image_idx].stars.size(), -1); // Fill with -1
+                        for (auto& pair : imgData[image_idx].starIds) {
+                            if (pair.first >= 0 && pair.first < (int)starToCatalogIndex.size()) {
+                                starToCatalogIndex[pair.first] = pair.second;
+                            }
                         }
-
-
                     }
 
                 }
@@ -692,11 +695,11 @@ static int LostMain(int argc, char **argv) {
 
             //display text in the top left of current attitude
 
-
-
-            
-
             window.clear();
+
+
+
+
             window.draw(sprites[image_idx]);
             window.draw(text);
 
@@ -715,67 +718,38 @@ static int LostMain(int argc, char **argv) {
             }
 
             sf::Vector2f center;
-            bool haveCenter = (count > 0);
 
-            if (haveCenter) {
+            if (count > 0) { // A center exists
                 center = sf::Vector2f(sum.x / count, sum.y / count);
             }
+
+
+            // i wanna see if there is a more efficient way to do this
 
             for (size_t i = 0; i < stars.size(); i++) {
                 Star& star = stars[i];
 
                 // pair with .first as starIndex, .second as catalogIndex we care about indexing with first
                 //bool isMatched = (std::find(starIds.begin(), starIds.end(), std::make_pair(i, 0)) != starIds.end());
-                int pairindex = -1;
+                
 
-                bool isMatched = false;
-                for (std::pair<int,int> id : starIds) {
-                    if (id.first == (int)i) {
-                        pairindex = id.second;
-                        isMatched = true;
-                        break;
-                    }
-                }
+                int pairindex = starToCatalogIndex[i];
 
-                // --- Draw box ---
-                sf::RectangleShape box;
-                box.setPosition(star.position.x - star.radiusX * 4,
-                                star.position.y - star.radiusY * 4);
-                box.setSize(sf::Vector2f(star.radiusX * 8, star.radiusY * 8));
-                box.setFillColor(sf::Color::Transparent);
-                box.setOutlineThickness(1);
-                box.setOutlineColor(isMatched ? sf::Color::Green : sf::Color::Red);
+                // Draw box
+                sf::RectangleShape box = sfml::CreateStarBox(star, pairindex != -1);
                 window.draw(box);
 
 
-                if (isMatched && haveCenter) {
+                if (pairindex != -1 && count > 0) { // A center exists
                     sf::Vertex line[] = {
                         sf::Vertex(center, sf::Color::Cyan),
-                        sf::Vertex(sf::Vector2f(star.position.x, star.position.y), sf::Color::Cyan)
-                    };
-                    window.draw(line, 2, sf::Lines);
+                        sf::Vertex(sf::Vector2f(star.position.x, star.position.y), sf::Color::Cyan)};
 
-                    if (pairindex < 0) continue;
-
-                    // draw starIds.catalogName near the star
-                    sf::Text starText;
-                    starText.setFont(font);
-                    if (pairindex + 1 >= 0 && pairindex + 1 < (int)starsNames.size()) {
-                        starText.setString(std::to_string(pairindex) + starsNames[pairindex]);
-                        std::cout << "Displaying star name: " << starsNames[pairindex] << "\n";
-                        // print pair index
-                        std::cout << "Star index: " << pairindex << "\n";
-                    } else {
-                        starText.setString(std::to_string(pairindex) + " ?");
-                    } //  Have not studied the database to show that the correct names will be used all the time. the +1 is to exclude Sol.
-                    starText.setCharacterSize(18);
-                    starText.setFillColor(sf::Color::White);
+                    // Draw star label
+                    sf::Text starText = sfml::CreateStarLabel(star, pairindex, starsNames, font);
                     
-                    // right most word should be on the top left corner of the star box
-                    sf::FloatRect textRect = starText.getLocalBounds();
-                    starText.setOrigin(textRect.width, 0);
-                    starText.setPosition(star.position.x - star.radiusX * 8 -4, star.position.y - star.radiusY * 8 -4);
                     window.draw(starText);
+                    window.draw(line, 2, sf::Lines);
                 }
             }
 
