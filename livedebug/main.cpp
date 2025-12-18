@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cstring>
 #include <map>
+#include <deque>
 
 
 #include "databases.hpp"
@@ -33,36 +34,7 @@
 #include <sfml-utils.hpp>
 
 
-// Used to store frame data.
-struct dost_ImgData {
-    // vector of stars
-    // attitude
-    lost::Attitude attitude;
-    std::vector<lost::Star> stars; 
-    std::vector<std::pair<int,int>> starIds;
-};
 
-
-
-// Names are not properly aligned, don't worry about this for now.
-std::vector<std::string> loadStarNames(const std::string& filename) {
-    std::vector<std::string> names;
-    std::ifstream file(filename);
-    std::string line;
-
-    
-    std::getline(file, line);
-
-    while (std::getline(file, line)) {
-        
-        if (!line.empty() && line.front() == '"' && line.back() == '"') {
-            line = line.substr(1, line.size() - 2);
-        }
-        names.push_back(line);
-    }
-
-    return names;
-}
 
 
 namespace lost {
@@ -99,148 +71,79 @@ static void PipelineRun(const PipelineOptions &values) {
 }
 
 static std::vector<dost_ImgData> PipelineRunSFML(PipelineOptions &values) {
-
     std::vector<dost_ImgData> returnData;
-    
-    // Step Function Implmentation
-    if (values.generate == 0) { 
-        values.generate = 1;
+
+
+    // Force generation mode
+    values.generate = 1;
+
+    // Ensure at least one frame
+    if (values.frames < 1) values.frames = 1;
+
+    // If max is not set, set it to min. Obviously, if the user really wants to tween to zero, this may be problematic, but min = 0 and max >= 0 is a reasonable assumption.
+    if (values.rollMax == 0) values.rollMax = values.rollMin;
+    if (values.raMax == 0)   values.raMax   = values.raMin;
+    if (values.decMax == 0)  values.decMax  = values.decMin;
+
+
+    // Force certain algorithms for current testing purposes.
+    values.centroidAlgo = "cog";
+    values.idAlgo = "py";
+    values.attitudeAlgo = "dqm";
+    values.databasePath = "my-database.dat";
+
+    // Set up Pipeline and reserve space for each frame.
+    Pipeline pipeline = SetPipeline(values); 
+
+    returnData.reserve(values.panning ? 1 : values.frames);
+
+
+    int startFrame = 0;
+    if (values.panning) {
+        startFrame = values.frames - 1;
     }
 
-    if ((values.rollMin != 0 || values.raMin != 0 || values.decMin != 0)) {
-        values.rollMax = values.rollMax == 0 ? values.rollMin : values.rollMax;
-        values.raMax = values.raMax == 0 ? values.raMin : values.raMax;
-        values.decMax = values.decMax == 0 ? values.decMin : values.decMax;
+    // Generate frame by frame.
+    for (int frame = startFrame; frame < values.frames; frame++) {
+        std::cout << "Processing frame: " << frame << "\n";
 
+        // Logic for interpolation (works for both cases because if panning, Min==Max)
+        double t = (values.frames > 1) ? (double)frame / (values.frames - 1) : 0.0;
 
-        for (int frame = 0; frame < values.frames; frame++) {
-            std::cout << frame << "\n";
+        values.generateRoll = values.rollMin + t * (values.rollMax - values.rollMin);
+        values.generateRa   = values.raMin   + t * (values.raMax   - values.raMin);
+        values.generateDe   = values.decMin  + t * (values.decMax  - values.decMin);
 
-            // image data
-            dost_ImgData imgData;
+        // Naming convention
+        char buffer[256];
+        snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04d.png", frame);
+        values.plotRawInput = std::string(buffer);
 
-            if (!values.panning && values.frames > 1) {
-                values.generateRoll = values.rollMin + frame * (values.rollMax - values.rollMin) / (values.frames - 1);
-                values.generateRa = values.raMin + frame * (values.raMax - values.raMin) / (values.frames - 1);
-                values.generateDe = values.decMin + frame * (values.decMax - values.decMin) / (values.frames - 1);
-
-            } else {
-                values.generateRoll = values.rollMin;
-                values.generateRa = values.raMin;
-                values.generateDe = values.decMin;
-
-
-                if (values.panning) {
-                    frame = values.frames;
-                }
-                
-            }
-
-
-
-            values.centroidAlgo = "cog";
-            values.idAlgo = "py";
-            values.attitudeAlgo = "dqm";
-            values.databasePath = "my-database.dat";
-
-
-            // file in /sfml-tests/frame_XXXX.png
-            char buffer[256];
-            snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04d.png", frame);
-            char buffer2[256];
-            snprintf(buffer2, sizeof(buffer2), "sfml-tests/frame_raw_%04d.png", frame);
-            values.plotInput = std::string(buffer2);
-            values.plotRawInput = std::string(buffer);
-
-
-            PipelineInputList input = GetPipelineInput(values);
-            Pipeline pipeline = SetPipeline(values);
-            // print pipeline centroidalgorithm
-            std::cout << "Centroid Algorithm: " << values.centroidAlgo << std::endl;
-
-            std::vector<PipelineOutput> outputs = pipeline.Go(input);
-
-            imgData.attitude = *(outputs[0].attitude);
-            imgData.stars = *(outputs[0].stars);
- 
-
-            
-
-
-            for (const PipelineOutput& output : outputs) {
-
-
-
-                if (output.attitude && output.attitude->IsKnown()) {
-                    EulerAngles spherical = output.attitude->ToSpherical();
-                    std::cout << "RA: " << RadToDeg(spherical.ra)
-                            << " DE: " << RadToDeg(spherical.de)
-                            << " Roll: " << RadToDeg(spherical.roll) << "\n";
-                } else {
-                    std::cout << "Attitude is UNKNOWN\n";
-                }
-
-
-                if (!output.stars) {
-                    std::cout << "no stars\n";
-                    continue;
-                }
-
-                const Stars& stars = *(output.stars);
-                std::cout << stars.size() << " stars:\n";
-
-                for (const Star& star : stars) {
-                    std::cout << "  star at (" 
-                            << star.position.x << ", " 
-                            << star.position.y << "), R=("
-                            << star.radiusX << ", " << star.radiusY << "), mag="
-                            << star.magnitude << "\n";
-                }
-
-                if (output.starIds && output.catalog.size() > 0) {
-                    for (const StarIdentifier &id : *output.starIds) {
-                        imgData.starIds.push_back(std::make_pair(id.starIndex, id.catalogIndex)); 
-                        std::cout
-                            << "starIndex=" << id.starIndex
-                            << " catalogIndex=" << id.catalogIndex;
-
-                        if (id.catalogIndex >= 0 && id.catalogIndex < (int)output.catalog.size()) {
-                            const CatalogStar &cs = output.catalog[id.catalogIndex];
-                            std::cout << " catalogName=" << cs.name
-                                    << " magnitude=" << cs.magnitude;
-                        } else {
-                            std::cout << " catalogName=<invalid index>";
-                        }
-
-                        std::cout << " weight=" << id.weight << std::endl;
-                    }
-                } else {
-                    std::cout << "No starIds available." << std::endl;
-                }
-
-
-
-                returnData.push_back(imgData);
-            }
-
-
-            PipelineComparison(input, outputs, values);
-
-            
-
-        }
-    } else{
+        // Run Pipeline
         PipelineInputList input = GetPipelineInput(values);
-        Pipeline pipeline = SetPipeline(values);
         std::vector<PipelineOutput> outputs = pipeline.Go(input);
-        PipelineComparison(input, outputs, values);
-    }
 
+        if (outputs.empty()) continue;
+
+        const auto& out = outputs[0];
+        dost_ImgData imgData;
+        
+        if (out.attitude) imgData.attitude = *out.attitude;
+        if (out.stars)    imgData.stars    = *out.stars;
+
+        if (out.starIds && !out.catalog.empty()) {
+            for (const StarIdentifier &id : *out.starIds) {
+                imgData.starIds.emplace_back(id.starIndex, id.catalogIndex);
+            }
+        }
+
+        returnData.push_back(imgData);
+
+        // Only print comparison for the frame being generated
+        PipelineComparison(input, outputs, values); 
+    }
 
     return returnData;
-
-
-
 }
 
 
@@ -487,21 +390,22 @@ static int LostMain(int argc, char **argv) {
             // print option
             std::cout << option << " b " << "\n";
         }
-        
-
-
-        sf::RenderWindow window(sf::VideoMode(1024, 1024), "LOST Animation");
 
         pipelineOptions.panning = false;
 
         std::vector<dost_ImgData> imgData = lost::PipelineRunSFML(pipelineOptions);
+        
+        // Initiate window and frame image holders.
+        sf::RenderWindow window(sf::VideoMode(1024, 1024), "LOST Animation");
 
-        std::vector<sf::Texture> textures;
+
+        // Hold textures in deque to prevent invalidation on push_back
+        std::deque<sf::Texture> textures;
         std::vector<sf::Sprite> sprites;
 
-        textures.reserve(pipelineOptions.frames);
         sprites.reserve(pipelineOptions.frames);
 
+        // Load images.
         for (int frame = 0; frame < pipelineOptions.frames; frame++) {
             char buffer[256];
             snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04d.png", frame);
@@ -512,8 +416,8 @@ static int LostMain(int argc, char **argv) {
                 continue;
             }
 
-            textures.push_back(tex);              // copy or move
-            sprites.emplace_back();               // default sprite
+            textures.push_back(tex);              
+            sprites.emplace_back();               
             sprites.back().setTexture(textures.back());
         }
 
@@ -556,20 +460,13 @@ static int LostMain(int argc, char **argv) {
 
         std::vector<int> starToCatalogIndex;
 
-        starToCatalogIndex.assign(imgData[image_idx].stars.size(), -1); // Fill with -1
-        for (auto& pair : imgData[image_idx].starIds) {
-            if (pair.first >= 0 && pair.first < (int)starToCatalogIndex.size()) {
-                starToCatalogIndex[pair.first] = pair.second;
-            }
-        }
+        sfml::UpdateStarCatalogMapping(imgData[image_idx], starToCatalogIndex);
 
         decimal ra = pipelineOptions.generateRa;
         decimal de = pipelineOptions.generateDe;
         decimal roll = pipelineOptions.generateRoll;
 
-        auto starsNames = loadStarNames("starnames.csv");
-
-
+        auto starsNames = sfml::loadStarNames("starnames.csv");
 
         text.setCharacterSize(24);        
         text.setFillColor(sf::Color::Green); 
@@ -598,12 +495,7 @@ static int LostMain(int argc, char **argv) {
                         UpdateHUD(image_idx);
 
 
-                        starToCatalogIndex.assign(imgData[image_idx].stars.size(), -1); // Fill with -1
-                        for (auto& pair : imgData[image_idx].starIds) {
-                            if (pair.first >= 0 && pair.first < (int)starToCatalogIndex.size()) {
-                                starToCatalogIndex[pair.first] = pair.second;
-                            }
-                        }
+                        sfml::UpdateStarCatalogMapping(imgData[image_idx], starToCatalogIndex);
 
 
                     }
@@ -613,13 +505,7 @@ static int LostMain(int argc, char **argv) {
                         UpdateHUD(image_idx);
 
 
-                        starToCatalogIndex.assign(imgData[image_idx].stars.size(), -1); // Fill with -1
-                        for (auto& pair : imgData[image_idx].starIds) {
-                            if (pair.first >= 0 && pair.first < (int)starToCatalogIndex.size()) {
-                                starToCatalogIndex[pair.first] = pair.second;
-                            }
-                        }
-
+                        sfml::UpdateStarCatalogMapping(imgData[image_idx], starToCatalogIndex);
                     }
 
 
@@ -628,6 +514,26 @@ static int LostMain(int argc, char **argv) {
                     if (event.key.code == sf::Keyboard::A || event.key.code == sf::Keyboard::D ||
                         event.key.code == sf::Keyboard::W || event.key.code == sf::Keyboard::S ||
                         event.key.code == sf::Keyboard::Q || event.key.code == sf::Keyboard::E) {
+
+                        if (image_idx < (int)sprites.size() - 1) {
+                            int newSize = image_idx + 1;
+                            
+                            
+                            sprites.resize(newSize);
+                            textures.resize(newSize);
+                            imgData.resize(newSize);
+                            
+                            
+                            pipelineOptions.frames = newSize;
+
+
+                            if (imgData[image_idx].attitude.IsKnown()) {
+                                EulerAngles s = imgData[image_idx].attitude.ToSpherical();
+                                ra = RadToDeg(s.ra);
+                                de = RadToDeg(s.de);
+                                roll = RadToDeg(s.roll);
+                            }
+                        }
 
                         // ra should clip to be within 0-360
                         ra -= 2.0f*(event.key.code == sf::Keyboard::A ? -1.0f : 0.0f) + 2.0f*(event.key.code == sf::Keyboard::D ? 1.0f : 0.0f);
@@ -660,7 +566,7 @@ static int LostMain(int argc, char **argv) {
 
                         char buffer[256];
 
-                        snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04zu.png", sprites.size()+1); // silly naming conventions
+                        snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04zu.png", sprites.size()); // silly naming conventions
 
 
                         sf::Texture tex;
@@ -681,12 +587,7 @@ static int LostMain(int argc, char **argv) {
 
                         UpdateHUD(image_idx);
 
-                        starToCatalogIndex.assign(imgData[image_idx].stars.size(), -1); // Fill with -1
-                        for (auto& pair : imgData[image_idx].starIds) {
-                            if (pair.first >= 0 && pair.first < (int)starToCatalogIndex.size()) {
-                                starToCatalogIndex[pair.first] = pair.second;
-                            }
-                        }
+                        sfml::UpdateStarCatalogMapping(imgData[image_idx], starToCatalogIndex);
                     }
 
                 }

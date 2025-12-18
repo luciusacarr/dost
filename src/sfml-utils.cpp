@@ -65,4 +65,41 @@ namespace sfml {
         box.setOutlineColor(isMatched ? sf::Color::Green : sf::Color::Red);
         return box;
     }
+
+
+
+
+
+
+    // Names are not properly aligned, don't worry about this for now.
+    std::vector<std::string> loadStarNames(const std::string& filename) {
+        std::vector<std::string> names;
+        std::ifstream file(filename);
+        std::string line;
+
+        
+        std::getline(file, line);
+
+        while (std::getline(file, line)) {
+            
+            if (!line.empty() && line.front() == '"' && line.back() == '"') {
+                line = line.substr(1, line.size() - 2);
+            }
+            names.push_back(line);
+        }
+
+        return names;
+    }
+
+
+    void UpdateStarCatalogMapping(const dost_ImgData& currentFrame, std::vector<int>& outMapping) {
+        outMapping.assign(currentFrame.stars.size(), -1);
+
+        
+        for (const auto& pair : currentFrame.starIds) {
+            if (pair.first >= 0 && pair.first < (int)outMapping.size()) {
+                outMapping[pair.first] = pair.second;
+            }
+        }
+    }
 }
