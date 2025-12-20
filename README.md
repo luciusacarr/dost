@@ -1,14 +1,15 @@
-# LOST: Open-source Star Tracker
+# DOST: Debug Open-source Star Tracker
 
 [![Build, Test, and Lint](https://github.com/UWCubeSat/lost/actions/workflows/build-test-lint.yml/badge.svg)](https://github.com/UWCubeSat/lost/actions/workflows/build-test-lint.yml)
 [![Publish Docs](https://github.com/UWCubeSat/lost/actions/workflows/publish-docs.yml/badge.svg)](https://github.com/UWCubeSat/lost/actions/workflows/publish-docs.yml)
 
-LOST is star tracker software for small, low-power, low-cost satellites. It is being developed in
-the Husky Satellite Lab, a CubeSat team at the University of Washington.
+DOST is a wrapper for LOST that allows users to implement fake databases and see live feedback from the LOST system.
 
-In depth code documentation is available on this repo's [Doxygen Page](https://uwcubesat.github.io/lost/)
+LOST's In depth code documentation is available on this repo's [Doxygen Page](https://uwcubesat.github.io/lost/)
 
-# Building LOST
+# Building DOST
+
+#### If LOST is already installed: The only new prerequisite is SFML! This line is bolded on the prerequisite list for your ease. 
 
 When making an actual, physical star tracker, you will most likely need to pick out the specific
 parts of LOST you want and make lots of changes. However, there's a LOST binary you can use to
@@ -24,6 +25,7 @@ You need Linux or macOS. On Windows, we recommend installing the Windows Subsyst
 - GNU Make. On Debian, `apt install make`
 - Groff, to generate help text. `apt install groff`
 - (Recommended) ASAN (Address Sanitizer). We use this to catch memory errors early. `apt install libasan`. (If you wish to use LOST without the address sanitizer, build it with `make LOST_DISABLE_ASAN=1`, or set `export LOST_DISABLE_ASAN=1` in your `~/.bashrc` file to disable it every time you build).
+- ***SFML***, a small graphics library for debug utilities. `apt-get install libsfml-dev`
 - Git. On Debian, `apt install git`
 - Cairo, to read and write PNGs as well as draw on them for debugging and demo purposes. You won't
   need this on your CubeSat. On Debian, `apt install libcairo2-dev`. Elsewhere, follow the
@@ -39,6 +41,8 @@ You need Linux or macOS. On Windows, we recommend installing the Windows Subsyst
 - Install [cairo](https://formulae.brew.sh/formula/cairo#default) via homebrew `brew install cairo`
 - Install [Eigen]("https://formulae.brew.sh/formula/eigen#default") via homebrew `brew install eigen`
     - Locate Eigen files and move them to `vendor/eigen3/Eigen` under the LOST repository
+- Install ***[SFML]("https://formulae.brew.sh/formula/sfml")*** via homebrew `brew install sfml`
+> [!WARNING] SFML implentation is untested on macOS: If errors are present, please open an issue or email me at lucius.acarr@gmail.com.
 - Install [groff]("https://formulae.brew.sh/formula/groff#default") via homebrew `brew install groff`
 - If you get errors mentioning 'ASAN' or 'AddressSanitizer', try `make clean` and then `make LOST_DISABLE_ASAN=1` to disable ASAN. See the Linux section above for more details.
 	
@@ -68,6 +72,39 @@ before running `./lost`.
 <!-- - Close the container with `docker-compose stop`. You can also close and remove the container with `docker-compose down` -->
 
 # Usage
+
+## DOST Specific Usage
+
+Make **DOST** with `make lost-livedebug` to get a new executable `lost-livedebug`.
+
+This executable carries more arguments and extra functionality. In order to to utilize them, we can call 
+
+ > ./lost-livedebug --sfml
+ 
+ to signal we wish to use the graphic debug software.
+
+The new commands available to us are:
+
+`--roll-max <float> --roll-min <float>`  -- optional command that will make your test interpolate from roll = roll-min -> roll-max.
+
+`--ra-max <float> --ra-min <float>`  -- optional command that will make your test interpolate from right ascension = ra-min -> ra-max.
+
+`--dec-max <float> --dec-min <float>`  -- optional command that will make your test interpolate from declination = dec-min -> dec-max.
+
+`--frames <int>`  -- The number of images when interpolating from min to max. Greater frames = greater computation times = greater ram usage (nominal).
+
+`--fake-database <local-path to a fake .tsv database>`  -- Merges a fake database given with the working YBSC catalog. Generates new stars based off the given ra,dec,magnitude coordinates. fake .tsv file MUST follow the conventions seen in the bright-star-catalog.tsv file, the IDs of the fake stars should start at 9110, see the fakestars.tsv file for example.
+
+
+As an example, here is a pan over the Big Dipper:
+
+```
+./lost-livedebug sfml --ra-min 135 --ra-max 200 --dec-max 55 --dec-min 55  --frames 15 --plot-raw-input raw-input.png --plot-input test.png
+```
+
+When loaded, you can utilize WASD+EQ to alter roll, right ascension, and declination when generating new frames. This process has a delay, which I look to attempt to minimize in the future.
+
+### Usual LOST Usage
 
 Run LOST via the `./lost` executable followed by the appropriate arguments. Executing`./lost` with no arguments will
 bring up a usage guide and options to see possible arguments.

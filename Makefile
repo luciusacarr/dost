@@ -1,4 +1,4 @@
-# Copyright (c) 2020 Mark Polyakov, Karen Haining, Muki Kiboigo
+# Copyright (c) 2020 Mark Polyakov, Karen Haining, Muki Kiboigo, Lucius Carr
 # (If you edit the file, add your name here!)
 #
 # Permission is hereby granted, free of charge, ...
@@ -9,7 +9,6 @@
 
 SRCS := $(wildcard src/*.cpp)
 TESTS := $(wildcard test/*.cpp)
-
 
 SUBSYS_LIVE_SRCS := $(wildcard livedebug/*.cpp)
 SUBSYS_LIVE_OBJS := $(patsubst %.cpp,%.o,$(SUBSYS_LIVE_SRCS))
@@ -26,36 +25,41 @@ TEST_OBJS := $(patsubst %.cpp,%.o,$(TESTS) $(filter-out %/main.o, $(OBJS)))
 
 DEPS := $(patsubst %.cpp,%.d,$(SRCS) $(TESTS) $(SUBSYS_LIVE_SRCS))
 
-BIN  := lost
+BIN     := lost
 TEST_BIN := ./lost-test
-
-BSC  := bright-star-catalog.tsv
+BSC     := bright-star-catalog.tsv
 
 # ------------------------------------------------------
 # Libraries and compiler flags
 # ------------------------------------------------------
 
 LIBS     := -lcairo
+SFML_LIBS := -lsfml-graphics -lsfml-window -lsfml-system
 CXXFLAGS := $(CXXFLAGS) -Ivendor -Isrc -Idocumentation -Wall -Wextra -Wno-missing-field-initializers -pedantic --std=c++11
 
-
-SFML_LIBS := -lsfml-graphics -lsfml-window -lsfml-system
+# --- macOS/Homebrew Path Auto-Detection ---
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    # Check if Homebrew is in the Apple Silicon path (/opt/homebrew) or Intel path (/usr/local)
+    HOMEBREW_PREFIX := $(shell [ -d /opt/homebrew ] && echo /opt/homebrew || echo /usr/local)
+    
+    # Add Homebrew to the include and library search paths
+    CXXFLAGS += -I$(HOMEBREW_PREFIX)/include
+    LDFLAGS  += -L$(HOMEBREW_PREFIX)/lib
+endif
 
 RELEASE_CXXFLAGS := $(CXXFLAGS) -O3
 CXXFLAGS := $(CXXFLAGS) -ggdb -fno-omit-frame-pointer
 
 ifndef LOST_DISABLE_ASAN
-	CXXFLAGS := $(CXXFLAGS) -fsanitize=address
+    CXXFLAGS := $(CXXFLAGS) -fsanitize=address
+    LDFLAGS  := $(LDFLAGS) -fsanitize=address
 endif
 
 RELEASE_LDFLAGS := $(LDFLAGS)
 
-ifndef LOST_DISABLE_ASAN
-	LDFLAGS := $(LDFLAGS) -fsanitize=address
-endif
-
 ifdef LOST_FLOAT_MODE
-	CXXFLAGS := $(CXXFLAGS) -Wdouble-promotion -Werror=double-promotion -D LOST_FLOAT_MODE
+    CXXFLAGS := $(CXXFLAGS) -Wdouble-promotion -Werror=double-promotion -D LOST_FLOAT_MODE
 endif
 
 # ------------------------------------------------------
@@ -74,11 +78,10 @@ $(BIN): $(OBJS)
 
 # NEW: Live Debug Program -------------------------------
 # Builds: lost-livedebug
-$(SUBSYS_LIVE_BIN): CXXFLAGS += -fsanitize=address
 $(SUBSYS_LIVE_BIN): $(SUBSYS_LIVE_OBJS) $(filter-out src/main.o, $(OBJS))
-	$(CXX) $(CXXFLAGS) -o $@ $(filter-out src/main.o, $(OBJS)) $(SUBSYS_LIVE_OBJS) $(SFML_LIBS) $(LIBS) $(LDFLAGS)
-livedebug: $(SUBSYS_LIVE_BIN)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(SFML_LIBS) $(LIBS) $(LDFLAGS)
 
+livedebug: $(SUBSYS_LIVE_BIN)
 
 # Manpage conversion ------------------------------------
 documentation/%.txt: documentation/%.man
@@ -120,4 +123,4 @@ clean:
 clean_all: clean
 	rm -f $(BSC) $(SUBSYS_LIVE_BIN)
 
-.PHONY: all clean test docs lint
+.PHONY: all clean test docs lint livedebug release

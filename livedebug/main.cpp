@@ -462,9 +462,7 @@ static int LostMain(int argc, char **argv) {
 
         sfml::UpdateStarCatalogMapping(imgData[image_idx], starToCatalogIndex);
 
-        decimal ra = pipelineOptions.generateRa;
-        decimal de = pipelineOptions.generateDe;
-        decimal roll = pipelineOptions.generateRoll;
+
 
         auto starsNames = sfml::loadStarNames("starnames.csv");
 
@@ -529,35 +527,22 @@ static int LostMain(int argc, char **argv) {
 
                             if (imgData[image_idx].attitude.IsKnown()) {
                                 EulerAngles s = imgData[image_idx].attitude.ToSpherical();
-                                ra = RadToDeg(s.ra);
-                                de = RadToDeg(s.de);
-                                roll = RadToDeg(s.roll);
+                                pipelineOptions.raMax = RadToDeg(s.ra);
+                                pipelineOptions.decMax = RadToDeg(s.de);
+                                pipelineOptions.rollMax = RadToDeg(s.roll);
                             }
                         }
 
-                        // ra should clip to be within 0-360
-                        ra -= 2.0f*(event.key.code == sf::Keyboard::A ? -1.0f : 0.0f) + 2.0f*(event.key.code == sf::Keyboard::D ? 1.0f : 0.0f);
-                        if (ra > 360.0f) ra -= 360.0f;
-                        if (ra < 0.0f) ra += 360.0f;
-                        de += 2.0f*(event.key.code == sf::Keyboard::W ? 1.0f : 0.0f) + 2.0f*(event.key.code == sf::Keyboard::S ? -1.0f : 0.0f);
-                        if (de > 90.0f) de = 90.0f;
-                        if (de < -90.0f) de = -90.0f;
-                        roll += 5.0f*(event.key.code == sf::Keyboard::Q ? -1.0f : 0.0f) + 5.0f*(event.key.code == sf::Keyboard::E ? 1.0f : 0.0f);
-                        if (roll > 360.0f) roll -= 360.0f;
-                        if (roll < 0.0f) roll += 360.0f;
-
-                        // could  shave line off by updating this directly.
-                        pipelineOptions.generateRa = ra;
-                        pipelineOptions.raMin = ra;
-                        pipelineOptions.raMax = ra;
-                        pipelineOptions.generateDe = de;
-                        pipelineOptions.decMin = de;
-                        pipelineOptions.decMax = de;
-                        pipelineOptions.generateRoll = roll;
-                        pipelineOptions.rollMin = roll;
-                        pipelineOptions.rollMax = roll;
-                        pipelineOptions.frames += 1;
-                        pipelineOptions.panning = true;
+                        // Adjust max attitude based on keypresses, since we are modifying the last frame we only need to adjust max
+                        pipelineOptions.raMax -= 2.0f*(event.key.code == sf::Keyboard::A ? -1.0f : 0.0f) + 2.0f*(event.key.code == sf::Keyboard::D ? 1.0f : 0.0f);
+                        if (pipelineOptions.raMax > 360.0f) pipelineOptions.raMax -= 360.0f;
+                        if (pipelineOptions.raMax < 0.0f) pipelineOptions.raMax += 360.0f;
+                        pipelineOptions.decMax += 2.0f*(event.key.code == sf::Keyboard::W ? 1.0f : 0.0f) + 2.0f*(event.key.code == sf::Keyboard::S ? -1.0f : 0.0f);
+                        if (pipelineOptions.decMax > 90.0f) pipelineOptions.decMax = 90.0f;
+                        if (pipelineOptions.decMax < -90.0f) pipelineOptions.decMax = -90.0f;
+                        pipelineOptions.rollMax += 5.0f*(event.key.code == sf::Keyboard::Q ? -1.0f : 0.0f) + 5.0f*(event.key.code == sf::Keyboard::E ? 1.0f : 0.0f);
+                        if (pipelineOptions.rollMax > 360.0f) pipelineOptions.rollMax -= 360.0f;
+                        if (pipelineOptions.rollMax < 0.0f) pipelineOptions.rollMax += 360.0f;
 
 
                         std::vector<dost_ImgData> imgDataTemp = lost::PipelineRunSFML(pipelineOptions);
