@@ -544,6 +544,9 @@ static int LostMain(int argc, char **argv) {
                         if (pipelineOptions.rollMax > 360.0f) pipelineOptions.rollMax -= 360.0f;
                         if (pipelineOptions.rollMax < 0.0f) pipelineOptions.rollMax += 360.0f;
 
+                        pipelineOptions.panning = true;
+                        pipelineOptions.frames += 1;
+
 
                         std::vector<dost_ImgData> imgDataTemp = lost::PipelineRunSFML(pipelineOptions);
 
