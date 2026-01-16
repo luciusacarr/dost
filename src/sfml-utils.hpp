@@ -12,6 +12,10 @@ struct dost_ImgData {
     lost::Attitude attitude;
     std::vector<lost::Star> stars; 
     std::vector<std::pair<int,int>> starIds;
+
+    double trueRa;
+    double trueDec;
+    double trueRoll;
 };
 
 

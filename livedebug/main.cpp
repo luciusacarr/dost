@@ -137,6 +137,10 @@ static std::vector<dost_ImgData> PipelineRunSFML(PipelineOptions &values) {
             }
         }
 
+        imgData.trueRa   = values.generateRa;
+        imgData.trueDec  = values.generateDe;
+        imgData.trueRoll = values.generateRoll;
+
         returnData.push_back(imgData);
 
         // Only print comparison for the frame being generated
@@ -516,21 +520,17 @@ static int LostMain(int argc, char **argv) {
                         if (image_idx < (int)sprites.size() - 1) {
                             int newSize = image_idx + 1;
                             
-                            
                             sprites.resize(newSize);
                             textures.resize(newSize);
                             imgData.resize(newSize);
                             
-                            
                             pipelineOptions.frames = newSize;
 
 
-                            if (imgData[image_idx].attitude.IsKnown()) {
-                                EulerAngles s = imgData[image_idx].attitude.ToSpherical();
-                                pipelineOptions.raMax = RadToDeg(s.ra);
-                                pipelineOptions.decMax = RadToDeg(s.de);
-                                pipelineOptions.rollMax = RadToDeg(s.roll);
-                            }
+                            pipelineOptions.raMax = imgData[image_idx].trueRa;
+                            pipelineOptions.decMax = imgData[image_idx].trueDec;
+                            pipelineOptions.rollMax = imgData[image_idx].trueRoll;
+
                         }
 
                         // Adjust max attitude based on keypresses, since we are modifying the last frame we only need to adjust max

@@ -62,7 +62,7 @@ LOST_CLI_OPTION("generate-saturation-photons" , decimal , generateSaturationPhot
 LOST_CLI_OPTION("generate-spread-stddev"      , decimal , generateSpreadStdDev      , 1     , STR_TO_DECIMAL(optarg)    , kNoDefaultArgument)
 LOST_CLI_OPTION("generate-shot-noise"         , bool    , generateShotNoise         , true  , atobool(optarg) , kNoDefaultArgument)
 LOST_CLI_OPTION("generate-dark-current"       , decimal , generateDarkCurrent       , 0.1   , STR_TO_DECIMAL(optarg)    , kNoDefaultArgument)
-LOST_CLI_OPTION("generate-read-noise-stddev"  , decimal , generateReadNoiseStdDev   , .05   , STR_TO_DECIMAL(optarg)    , kNoDefaultArgument)
+LOST_CLI_OPTION("generate-read-noise-stddev"  , decimal , generateReadNoiseStdDev   , 0.05   , STR_TO_DECIMAL(optarg)    , kNoDefaultArgument)
 LOST_CLI_OPTION("generate-ra"                 , decimal , generateRa                , 88    , STR_TO_DECIMAL(optarg)    , kNoDefaultArgument)
 LOST_CLI_OPTION("generate-de"                 , decimal , generateDe                , 7     , STR_TO_DECIMAL(optarg)    , kNoDefaultArgument)
 LOST_CLI_OPTION("generate-roll"               , decimal , generateRoll              , 0     , STR_TO_DECIMAL(optarg)    , kNoDefaultArgument)
@@ -97,5 +97,7 @@ LOST_CLI_OPTION("noise-min"   , decimal , noiseEnd   , 0 , STR_TO_DECIMAL(optarg
 
 LOST_CLI_OPTION("frames"  , decimal , frames  , 1 , STR_TO_DECIMAL(optarg) , kNoDefaultArgument)
 LOST_CLI_OPTION("panning"  , bool , panning  , false , atobool(optarg) , true)
+
+LOST_CLI_OPTION("brightness-limit"  , bool , brightnessLimit  , true , atobool(optarg) , true)
 
 LOST_CLI_OPTION("fake-database"  , std::string , fakeDatabase  , "" , optarg, kNoDefaultArgument)

@@ -134,7 +134,8 @@ public:
                            int numFalseStars, int falseMinMagnitude, int falseMaxMagnitude,
                            int cutoffMag,
                            decimal perturbationStddev,
-                           Catalog fakeCatalog = Catalog());
+                           Catalog fakeCatalog = Catalog(),
+                           bool brightnessLimit = true);
 
 
     const Image *InputImage() const override { return &image; };

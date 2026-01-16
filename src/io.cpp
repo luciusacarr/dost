@@ -145,6 +145,29 @@ const Catalog &CatalogRead() {
     return catalog;
 }
 
+
+/**
+ * Calculates the definite integral of a 1D Gaussian function exp(-(x-u)^2 / (2s^2))
+ * from `lower` to `upper`.
+ */
+
+// I need to come back here later to see exactly how this works, I replaced it for a reason but didn't leave a good reason why this one fell short.
+
+/*static decimal IntegrateGaussian1D(decimal lower, decimal upper, decimal mean, decimal stddev) {
+    // We use the identity: Integral(exp(-x^2)) = (sqrt(pi)/2) * erf(x)
+    // The constant factor from the integration of the Gaussian form is: stddev * sqrt(pi / 2)
+    
+    decimal factor = stddev * DECIMAL_SQRT(DECIMAL_M_PI / 2.0);
+    decimal sqrt2 = DECIMAL_SQRT(2.0);
+    decimal denom = stddev * sqrt2;
+    
+    decimal upperErf = DECIMAL_ERF((upper - mean) / denom);
+    decimal lowerErf = DECIMAL_ERF((lower - mean) / denom);
+    
+    return factor * (upperErf - lowerErf);
+}*/
+
+
 /// Convert a colored Cairo image surface into a row-major array of grayscale pixels.
 /// Result is allocated with new[]
 unsigned char *SurfaceToGrayscaleImage(cairo_surface_t *cairoSurface) {
@@ -526,7 +549,8 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
                                                int falseStarMaxMagnitude,
                                                int cutoffMag,
                                                decimal perturbationStddev,
-                                               Catalog fakeCatalog)
+                                               Catalog fakeCatalog,
+                                               bool brightnessLimit)
     : camera(camera), attitude(attitude), catalog(catalog) {
 
     assert(falseStarMaxMagnitude <= falseStarMinMagnitude);
@@ -663,6 +687,60 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
         // (and fractional amounts are relative to the corner). When we color a pixel, we ideally
         // would integrate the intensity of the star over that pixel, but we can make do by sampling
         // the intensity of the star at the /center/ of the pixel, ie, star.x+.5 and star.y+.5
+        /*for (int yPixel = yMin; yPixel <= yMax; yPixel++) {
+
+            decimal yFlux = IntegrateGaussian1D(yPixel, yPixel + 1.0, star.position.y, starSpreadStdDev);
+
+
+            for (int xPixel = xMin; xPixel <= xMax; xPixel++) {
+                // offset of beginning & end of readout compared to beginning & end of readout for
+                // center row
+                decimal readoutOffset = readoutTime * (yPixel - image.height/DECIMAL(2.0)) / image.height;
+                decimal tStart = -exposureTime/DECIMAL(2.0) + readoutOffset;
+                decimal tEnd = exposureTime/DECIMAL(2.0) + readoutOffset;
+
+                // static time
+                decimal curPhotons = 0;
+
+                if (motionBlurEnabled) {
+                    // Motion blur is mathematically complex to integrate analytically in 2D 
+                    // without rotation. For now, we can keep the sampling ONLY for motion blur,
+                    // or (better) just sample the center of the pixel to save time.
+                    // This implementation keeps sampling for Motion Blur to ensure accuracy:
+                    for (int xSample = 0; xSample < oversamplingPerAxis; xSample++) {
+                        for (int ySample = 0; ySample < oversamplingPerAxis; ySample++) {
+                            decimal x = xPixel + (xSample + DECIMAL(0.5)) / oversamplingPerAxis;
+                            decimal y = yPixel + (ySample + DECIMAL(0.5)) / oversamplingPerAxis;
+                            
+                            curPhotons += (MotionBlurredPixelBrightness({x, y}, star, tEnd, starSpreadStdDev)
+                                         - MotionBlurredPixelBrightness({x, y}, star, tStart, starSpreadStdDev));
+                        }
+                    }
+                    // Average the samples
+                    curPhotons /= oversamplingBrightnessFactor;
+
+                } else {
+                    // --- NEW FAST PATH FOR STATIC STARS ---
+                    
+                    // 1. Calculate the total light energy in the X band of this pixel
+                    decimal xFlux = IntegrateGaussian1D(xPixel, xPixel + 1.0, star.position.x, starSpreadStdDev);
+                    
+                    // 2. Calculate the total light energy in the Y band of this pixel
+                    
+
+                    // 3. Combine them. 
+                    // Note: peakBrightness is density per time unit. 
+                    // We multiply by exposureTime to get total density over time.
+                    // We DO NOT divide by oversamplingBrightnessFactor because we integrated the full area.
+                    curPhotons = star.peakBrightness * xFlux * yFlux * exposureTime;
+                }
+
+                assert(DECIMAL(0.0) <= curPhotons);
+                photonsBuffer[xPixel + yPixel*image.width] += curPhotons;             
+            }
+        }*/
+
+
         for (int xPixel = xMin; xPixel <= xMax; xPixel++) {
             for (int yPixel = yMin; yPixel <= yMax; yPixel++) {
                 // offset of beginning & end of readout compared to beginning & end of readout for
@@ -697,11 +775,15 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
         }
     }
 
+    
+
     std::normal_distribution<decimal> readNoiseDist(DECIMAL(0.0), readNoiseStdDev);
 
     // convert from photon counts to observed pixel brightnesses, applying noise and such.
     imageData = std::vector<unsigned char>(image.width*image.height);
     image.image = imageData.data();
+
+
     for (int i = 0; i < image.width * image.height; i++) {
         decimal curBrightness = 0;
 
@@ -720,8 +802,15 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
             // anyway)
             decimal photons = photonsBuffer[i];
             if (photons > DECIMAL(LONG_MAX) - DECIMAL(3.0) * DECIMAL_SQRT(LONG_MAX)) {
-                std::cout << "ERROR: One of the pixels had too many photons. Generated image would not be physically accurate, exiting." << std::endl;
-                exit(1);
+                if (!brightnessLimit) {
+                    // clamp to max possible value that won't cause poisson_distribution to loop forever
+                    photonsBuffer[i] = DECIMAL(LONG_MAX) - DECIMAL(3.0) * DECIMAL_SQRT(LONG_MAX);
+                }
+                else {
+                    std::cout << "ERROR: One of the pixels had too many photons. Generated image would not be physically accurate, exiting." << std::endl;
+                    exit(1);
+                }
+                
             }
             std::poisson_distribution<long> shotNoiseDist(photonsBuffer[i]);
             quantizedPhotons = shotNoiseDist(*rng);
@@ -730,8 +819,21 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
         }
         curBrightness += quantizedPhotons / saturationPhotons;
 
+
         // std::clamp not introduced until C++17, so we avoid it.
-        decimal clampedBrightness = std::max(std::min(curBrightness, DECIMAL(1.0)), DECIMAL(0.0));
+
+        decimal clampedBrightness;
+        
+        if (!brightnessLimit) {
+            // Keep the user informed. (Not in the loop to avoid spamming.)
+            std::cout << "Brightness limit disabled, resulting image may not be realistic." << std::endl;
+            clampedBrightness = std::max(std::min(curBrightness, DECIMAL(1.0)), DECIMAL(0.0));
+        }
+        else
+        {
+            clampedBrightness = std::max(curBrightness, DECIMAL(0.0));
+        }
+        
         imageData[i] = floor(clampedBrightness * kMaxBrightness); // TODO: off-by-one, 256?
     }
 }
@@ -828,7 +930,8 @@ PipelineInputList GetGeneratedPipelineInput(const PipelineOptions &values) {
                 (values.generateFalseMaxMag * 100),
                 (values.generateCutoffMag * 100),
                 values.generatePerturbationStddev,
-                catalog);
+                catalog,
+                values.brightnessLimit);
 
 
 
@@ -1010,6 +1113,13 @@ PipelineOutput Pipeline::Go(const PipelineInput &input) {
             }
         }
         result.stars = std::unique_ptr<Stars>(filteredStars);
+
+        // perhaps we could no filter out stars with a large angular diameter?
+
+        for (const Star &star : *filteredStars) {
+            std::cout << "  Star at (" << star.position.x << ", " << star.position.y << ") with magnitude " << star.magnitude << std::endl;
+        }
+
         inputStars = filteredStars;
 
         // any starid set up to this point needs to be discarded, because it's based on input

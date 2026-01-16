@@ -87,7 +87,8 @@ std::vector<CatalogStar> BscParse(std::string tsvPath) {
     }
 
     fclose(file);
-    assert(result.size() > 9000); // basic sanity check
+    // IM REMOVING THE SANITY CHECK BECAUSE I HAVE ADDED FAKE STARS. PERHAPS WE ADD #fakestars TO THE CHECK IN THE FUTURE
+    // assert(result.size() > 9000); // basic sanity check
     return result;
 }
 
@@ -97,30 +98,25 @@ std::vector<CatalogStar> BscParse(std::string tsvPath) {
 
 /// Clone of the CatalogRead function, but allows specifying a different catalog file path.
 /// Finds use in adding fake databases for testing.
-const Catalog &specifiedCatalogRead(std::string tsvPath) {
-    static bool readYet = false;
-    static std::vector<CatalogStar> catalog;
+Catalog specifiedCatalogRead(const std::string& tsvPath) {
+    Catalog catalog = BscParse(tsvPath);
 
-    if (!readYet) {
-        readYet = true;
-        catalog = BscParse(tsvPath);
-        // perform essential narrowing
-        // remove all stars with exactly the same position as another, keeping the one with brighter magnitude
-        std::sort(catalog.begin(), catalog.end(), [](const CatalogStar &a, const CatalogStar &b) {
-            return a.spatial.x < b.spatial.x;
-        });
-        for (int i = catalog.size()-1; i > 0; i--) {
-            if ((catalog[i].spatial - catalog[i-1].spatial).Magnitude() < DECIMAL(5e-5)) { // 70 stars removed at this threshold.
-                if (catalog[i].magnitude > catalog[i-1].magnitude) {
-                    catalog.erase(catalog.begin() + i);
-                } else {
-                    catalog.erase(catalog.begin() + i - 1);
-                }
-            }
+    std::sort(catalog.begin(), catalog.end(), [](const CatalogStar &a, const CatalogStar &b) {
+        return a.spatial.x < b.spatial.x;
+    });
+
+    for (int i = catalog.size() - 1; i > 0; --i) {
+        if ((catalog[i].spatial - catalog[i - 1].spatial).Magnitude() < DECIMAL(5e-5)) {
+            if (catalog[i].magnitude > catalog[i - 1].magnitude)
+                catalog.erase(catalog.begin() + i);
+            else
+                catalog.erase(catalog.begin() + i - 1);
         }
     }
-    return catalog;
+
+    return catalog;  // returned by value (NRVO applies)
 }
+
 
 /// Read and parse the full catalog from disk. If called multiple times, will re-use the first result.
 const Catalog &CatalogRead() {
@@ -148,6 +144,26 @@ const Catalog &CatalogRead() {
     }
     return catalog;
 }
+
+
+/**
+ * Calculates the definite integral of a 1D Gaussian function exp(-(x-u)^2 / (2s^2))
+ * from `lower` to `upper`.
+ */
+static decimal IntegrateGaussian1D(decimal lower, decimal upper, decimal mean, decimal stddev) {
+    // We use the identity: Integral(exp(-x^2)) = (sqrt(pi)/2) * erf(x)
+    // The constant factor from the integration of the Gaussian form is: stddev * sqrt(pi / 2)
+    
+    decimal factor = stddev * DECIMAL_SQRT(DECIMAL_M_PI / 2.0);
+    decimal sqrt2 = DECIMAL_SQRT(2.0);
+    decimal denom = stddev * sqrt2;
+    
+    decimal upperErf = DECIMAL_ERF((upper - mean) / denom);
+    decimal lowerErf = DECIMAL_ERF((lower - mean) / denom);
+    
+    return factor * (upperErf - lowerErf);
+}
+
 
 /// Convert a colored Cairo image surface into a row-major array of grayscale pixels.
 /// Result is allocated with new[]
@@ -529,7 +545,8 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
                                                int falseStarMinMagnitude,
                                                int falseStarMaxMagnitude,
                                                int cutoffMag,
-                                               decimal perturbationStddev)
+                                               decimal perturbationStddev,
+                                               Catalog fakeCatalog)
     : camera(camera), attitude(attitude), catalog(catalog) {
 
     assert(falseStarMaxMagnitude <= falseStarMinMagnitude);
@@ -562,6 +579,10 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
     std::normal_distribution<decimal> perturbation1DDistribution(DECIMAL(0.0), perturbationStddev);
 
     Catalog catalogWithFalse = catalog;
+
+    for (const CatalogStar &fs : fakeCatalog) {
+        catalogWithFalse.push_back(fs);
+    } // my attempt at appending false stars idk maybe below is a random method. im introducing a targeted method. but it could be randomized.
 
     std::uniform_real_distribution<decimal> uniformDistribution(DECIMAL(0.0), DECIMAL(1.0));
     std::uniform_int_distribution<int> magnitudeDistribution(falseStarMaxMagnitude, falseStarMinMagnitude);
@@ -670,28 +691,46 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
                 decimal tStart = -exposureTime/DECIMAL(2.0) + readoutOffset;
                 decimal tEnd = exposureTime/DECIMAL(2.0) + readoutOffset;
 
-                // loop through all samples in the current pixel
-                for (int xSample = 0; xSample < oversamplingPerAxis; xSample++) {
-                    for (int ySample = 0; ySample < oversamplingPerAxis; ySample++) {
-                        decimal x = xPixel + (xSample+DECIMAL(0.5))/oversamplingPerAxis;
-                        decimal y = yPixel + (ySample+DECIMAL(0.5))/oversamplingPerAxis;
+                // static time
+                decimal curPhotons = 0;
 
-                        decimal curPhotons;
-                        if (motionBlurEnabled) {
-                            curPhotons =
-                                (MotionBlurredPixelBrightness({x, y}, star, tEnd, starSpreadStdDev)
-                                 - MotionBlurredPixelBrightness({x, y}, star, tStart, starSpreadStdDev))
-                                / oversamplingBrightnessFactor;
-                        } else {
-                            curPhotons = StaticPixelBrightness({x, y}, star, exposureTime, starSpreadStdDev)
-                                / oversamplingBrightnessFactor;
+                if (motionBlurEnabled) {
+                    // Motion blur is mathematically complex to integrate analytically in 2D 
+                    // without rotation. For now, we can keep the sampling ONLY for motion blur,
+                    // or (better) just sample the center of the pixel to save time.
+                    // This implementation keeps sampling for Motion Blur to ensure accuracy:
+                    for (int xSample = 0; xSample < oversamplingPerAxis; xSample++) {
+                        for (int ySample = 0; ySample < oversamplingPerAxis; ySample++) {
+                            decimal x = xPixel + (xSample + DECIMAL(0.5)) / oversamplingPerAxis;
+                            decimal y = yPixel + (ySample + DECIMAL(0.5)) / oversamplingPerAxis;
+                            
+                            curPhotons += (MotionBlurredPixelBrightness({x, y}, star, tEnd, starSpreadStdDev)
+                                         - MotionBlurredPixelBrightness({x, y}, star, tStart, starSpreadStdDev));
                         }
-
-                        assert(DECIMAL(0.0) <= curPhotons);
-
-                        photonsBuffer[xPixel + yPixel*image.width] += curPhotons;
                     }
+                    // Average the samples
+                    curPhotons /= oversamplingBrightnessFactor;
+
+                } else {
+                    // --- NEW FAST PATH FOR STATIC STARS ---
+                    
+                    // 1. Calculate the total light energy in the X band of this pixel
+                    decimal xFlux = IntegrateGaussian1D(xPixel, xPixel + 1.0, star.position.x, starSpreadStdDev);
+                    
+                    // 2. Calculate the total light energy in the Y band of this pixel
+                    decimal yFlux = IntegrateGaussian1D(yPixel, yPixel + 1.0, star.position.y, starSpreadStdDev);
+
+                    // 3. Combine them. 
+                    // Note: peakBrightness is density per time unit. 
+                    // We multiply by exposureTime to get total density over time.
+                    // We DO NOT divide by oversamplingBrightnessFactor because we integrated the full area.
+                    curPhotons = star.peakBrightness * xFlux * yFlux * exposureTime;
                 }
+
+                assert(DECIMAL(0.0) <= curPhotons);
+                photonsBuffer[xPixel + yPixel*image.width] += curPhotons;
+
+
             }
         }
     }
@@ -719,8 +758,8 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
             // anyway)
             decimal photons = photonsBuffer[i];
             if (photons > DECIMAL(LONG_MAX) - DECIMAL(3.0) * DECIMAL_SQRT(LONG_MAX)) {
-                //std::cout << "ERROR: One of the pixels had too many photons. Generated image would not be physically accurate, exiting." << std::endl;
-                //exit(1);
+                std::cout << "ERROR: One of the pixels had too many photons. Generated image would not be physically accurate, exiting." << std::endl;
+                exit(1);
             }
             std::poisson_distribution<long> shotNoiseDist(photonsBuffer[i]);
             quantizedPhotons = shotNoiseDist(*rng);
@@ -797,21 +836,16 @@ PipelineInputList GetGeneratedPipelineInput(const PipelineOptions &values) {
             inputAttitude = attitude;
         }
 
-        // If we have a fake database to pull from then use that
-        const Catalog &catalog = values.fakeDatabase != "" ? specifiedCatalogRead(values.fakeDatabase) : nullptr;
 
-        // if catalog is not a null ptr then append the fake database stars to the end of the normal catalog
-        if (catalog != nullptr) {
-            Catalog baseCatalog = CatalogRead();
-            Catalog combinedCatalog = baseCatalog;
-            combinedCatalog.insert(combinedCatalog.end(), catalog->begin(), catalog->end());
-            catalog = combinedCatalog;
-        } else {
-            catalog = CatalogRead();
-        }
+        Catalog catalog;
+
+        if (!values.fakeDatabase.empty()) {
+            catalog = specifiedCatalogRead(values.fakeDatabase);
+        
+        } 
 
         GeneratedPipelineInput *curr = new GeneratedPipelineInput(
-                catalog,
+                CatalogRead(),
                 inputAttitude,
                 Camera(focalLength, values.generateXRes, values.generateYRes),
                 &noiseRng,
@@ -831,7 +865,10 @@ PipelineInputList GetGeneratedPipelineInput(const PipelineOptions &values) {
                 (values.generateFalseMinMag * 100),
                 (values.generateFalseMaxMag * 100),
                 (values.generateCutoffMag * 100),
-                values.generatePerturbationStddev);
+                values.generatePerturbationStddev,
+                catalog);
+
+
 
             result.push_back(std::unique_ptr<PipelineInput>(curr));
 
@@ -1011,6 +1048,10 @@ PipelineOutput Pipeline::Go(const PipelineInput &input) {
             }
         }
         result.stars = std::unique_ptr<Stars>(filteredStars);
+
+
+
+
         inputStars = filteredStars;
 
         // any starid set up to this point needs to be discarded, because it's based on input
