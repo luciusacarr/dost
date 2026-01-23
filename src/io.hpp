@@ -27,6 +27,11 @@
 #include "attitude-estimators.hpp"
 #include "databases.hpp"
 
+#ifndef DEFAULT_BSC_PATH
+#define DEFAULT_BSC_PATH "bright-star-catalog.tsv"
+#endif
+
+
 namespace lost {
 
 const char kNoDefaultArgument = 0;
@@ -46,7 +51,8 @@ private:
 };
 
 // use the environment variable LOST_BSC_PATH, or read from ./bright-star-catalog.tsv
-const Catalog &CatalogRead();
+// set default const std::string& tsvPath = "bright-star-catalog.tsv"
+const Catalog &CatalogRead(const std::string& tsvPath = DEFAULT_BSC_PATH);
 // Convert a cairo surface to array of grayscale bytes
 unsigned char *SurfaceToGrayscaleImage(cairo_surface_t *cairoSurface);
 cairo_surface_t *GrayscaleImageToSurface(const unsigned char *, const int width, const int height);
@@ -58,6 +64,8 @@ cairo_surface_t *GrayscaleImageToSurface(const unsigned char *, const int width,
 //                         int             *pi_centroids_length); // TODO: fov, actual angle, etc
 
 // type for functions that create a centroid algorithm (by prompting the user usually)
+
+void UpdateFakeStarsFile(const std::string& fakestarsPath, int falseStarMinMagnitude = -2, int falseStarMaxMagnitude = 8);
 
 /// An 8-bit grayscale 2d image
 class Image {
@@ -135,7 +143,8 @@ public:
                            int cutoffMag,
                            decimal perturbationStddev,
                            Catalog fakeCatalog = Catalog(),
-                           bool brightnessLimit = true);
+                           bool brightnessLimit = true
+                           );
 
 
     const Image *InputImage() const override { return &image; };

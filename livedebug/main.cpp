@@ -73,7 +73,7 @@ static void PipelineRun(const PipelineOptions &values) {
 static std::vector<dost_ImgData> PipelineRunSFML(PipelineOptions &values) {
     std::vector<dost_ImgData> returnData;
 
-
+    
     // Force generation mode
     values.generate = 1;
 
@@ -86,11 +86,20 @@ static std::vector<dost_ImgData> PipelineRunSFML(PipelineOptions &values) {
     if (values.decMax == 0)  values.decMax  = values.decMin;
 
 
+
+
     // Force certain algorithms for current testing purposes.
     values.centroidAlgo = "cog";
     values.idAlgo = "py";
     values.attitudeAlgo = "dqm";
     values.databasePath = "my-database.dat";
+
+
+    if (values.regenFalseDb) {
+        // regenerate fake star database
+        std::cout << "Regenerating fake star database..." << std::endl;
+        UpdateFakeStarsFile("fakestars.tsv", values.generateFalseMinMag, values.generateFalseMaxMag);
+    }
 
     // Set up Pipeline and reserve space for each frame.
     Pipeline pipeline = SetPipeline(values); 
@@ -395,19 +404,26 @@ static int LostMain(int argc, char **argv) {
             std::cout << option << " b " << "\n";
         }
 
-        pipelineOptions.panning = false;
+
 
         std::vector<dost_ImgData> imgData = lost::PipelineRunSFML(pipelineOptions);
+
+        pipelineOptions.regenFalseDb = false; // disable regen for WASDQE panning.
         
+
+        // --------------------------------------
+        // SFML Setup
+        // --------------------------------------
         // Initiate window and frame image holders.
         sf::RenderWindow window(sf::VideoMode(1024, 1024), "LOST Animation");
-
 
         // Hold textures in deque to prevent invalidation on push_back
         std::deque<sf::Texture> textures;
         std::vector<sf::Sprite> sprites;
 
         sprites.reserve(pipelineOptions.frames);
+
+        bool showStarBoxes = true;
 
         // Load images.
         for (int frame = 0; frame < pipelineOptions.frames; frame++) {
@@ -511,7 +527,7 @@ static int LostMain(int argc, char **argv) {
                     }
 
 
-                    // what im about to do is TERRIBLE. REIMPLEMENT! THIS IS FOR TESTING!!!!!
+                    // messy
 
                     if (event.key.code == sf::Keyboard::A || event.key.code == sf::Keyboard::D ||
                         event.key.code == sf::Keyboard::W || event.key.code == sf::Keyboard::S ||
@@ -577,6 +593,9 @@ static int LostMain(int argc, char **argv) {
 
                         sfml::UpdateStarCatalogMapping(imgData[image_idx], starToCatalogIndex);
                     }
+                    else if (event.key.code == sf::Keyboard::J) {
+                        showStarBoxes = !showStarBoxes;
+                    }
 
                 }
 
@@ -624,17 +643,22 @@ static int LostMain(int argc, char **argv) {
 
                 int pairindex = starToCatalogIndex[i];
 
+                bool isMatched = (pairindex != -1);
+
                 // Draw box
-                sf::RectangleShape box = sfml::CreateStarBox(star, pairindex != -1);
-                window.draw(box);
+                if (showStarBoxes || isMatched) {
+                    sf::RectangleShape box = sfml::CreateStarBox(star, pairindex != -1);
+                    window.draw(box);
+                }
 
 
-                if (pairindex != -1 && count > 0) { // A center exists
+                if (isMatched && count > 0) { // A center exists
                     sf::Vertex line[] = {
                         sf::Vertex(center, sf::Color::Cyan),
                         sf::Vertex(sf::Vector2f(star.position.x, star.position.y), sf::Color::Cyan)};
 
                     // Draw star label
+                    
                     sf::Text starText = sfml::CreateStarLabel(star, pairindex, starsNames, font);
                     
                     window.draw(starText);

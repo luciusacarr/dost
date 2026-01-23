@@ -99,5 +99,8 @@ LOST_CLI_OPTION("frames"  , decimal , frames  , 1 , STR_TO_DECIMAL(optarg) , kNo
 LOST_CLI_OPTION("panning"  , bool , panning  , false , atobool(optarg) , true)
 
 LOST_CLI_OPTION("brightness-limit"  , bool , brightnessLimit  , true , atobool(optarg) , true)
+LOST_CLI_OPTION("regen-false-db"  , bool , regenFalseDb  , false , atobool(optarg) , false)
+
+// could add regen options for mag,count,etc. but for now just regenerate everything with hard coded random limits
 
 LOST_CLI_OPTION("fake-database"  , std::string , fakeDatabase  , "" , optarg, kNoDefaultArgument)

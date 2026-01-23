@@ -92,13 +92,11 @@ std::vector<CatalogStar> BscParse(std::string tsvPath) {
     return result;
 }
 
-#ifndef DEFAULT_BSC_PATH
-#define DEFAULT_BSC_PATH "bright-star-catalog.tsv"
-#endif
 
 /// Clone of the CatalogRead function, but allows specifying a different catalog file path.
 /// Finds use in adding fake databases for testing.
-Catalog specifiedCatalogRead(const std::string& tsvPath) {
+// Perhaps could be merged with the original function with a default parameter.
+/*Catalog specifiedCatalogRead(const std::string& tsvPath) {
     Catalog catalog = BscParse(tsvPath);
 
     std::sort(catalog.begin(), catalog.end(), [](const CatalogStar &a, const CatalogStar &b) {
@@ -115,18 +113,17 @@ Catalog specifiedCatalogRead(const std::string& tsvPath) {
     }
 
     return catalog;  // returned by value (NRVO applies)
-}
+}*/
 
 
 /// Read and parse the full catalog from disk. If called multiple times, will re-use the first result.
-const Catalog &CatalogRead() {
+const Catalog &CatalogRead(const std::string& tsvPath) {
     static bool readYet = false;
     static std::vector<CatalogStar> catalog;
 
-    if (!readYet) {
-        readYet = true;
-        char *tsvPath = getenv("LOST_BSC_PATH");
-        catalog = BscParse(tsvPath ? tsvPath : DEFAULT_BSC_PATH);
+    if (!readYet || tsvPath != DEFAULT_BSC_PATH) {
+        readYet = tsvPath == DEFAULT_BSC_PATH;
+        catalog = BscParse(tsvPath);
         // perform essential narrowing
         // remove all stars with exactly the same position as another, keeping the one with brighter magnitude
         std::sort(catalog.begin(), catalog.end(), [](const CatalogStar &a, const CatalogStar &b) {
@@ -145,6 +142,45 @@ const Catalog &CatalogRead() {
     return catalog;
 }
 
+
+// function to update the file /fakestars.tsv with random stars for testing
+void UpdateFakeStarsFile(const std::string& fakestarsPath, int falseStarMinMagnitude, int falseStarMaxMagnitude) {
+    const int n_start = 9110;
+    // seed with a real random value, if available
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis_num_stars(1, 100000);
+    int num_new_stars = dis_num_stars(gen);
+
+    std::default_random_engine *rng = new std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count());
+
+
+
+    std::ofstream f(fakestarsPath, std::ofstream::trunc);
+    if (!f.is_open()) {
+        std::cerr << "Error opening fakestars file for writing." << std::endl;
+        return;
+    }
+
+    std::uniform_real_distribution<decimal> uniformDistribution(DECIMAL(0.0), DECIMAL(1.0));
+    std::uniform_int_distribution<int> magnitudeDistribution(falseStarMaxMagnitude, falseStarMinMagnitude);
+
+    for (int i = 0; i < num_new_stars; ++i) {
+        decimal ra = uniformDistribution(*rng) * 360.0;
+        decimal dec = uniformDistribution(*rng) * 180.0 - 90.0;
+        decimal mag = magnitudeDistribution(*rng);
+        int id = n_start + i;
+
+        f << std::fixed;
+        f.precision(6);
+        f << ra << "|" << dec << "|" << id << "| |";
+        f.precision(2);
+        f << mag << "\n";
+    }
+
+    f.close();
+    std::cout << "Cleared old data and wrote " << num_new_stars << " new stars to " << fakestarsPath << "." << std::endl;
+}
 
 /**
  * Calculates the definite integral of a 1D Gaussian function exp(-(x-u)^2 / (2s^2))
@@ -403,6 +439,8 @@ cairo_surface_t *PipelineInput::InputImageSurface() const {
 //     Attitude attitude;
 // };
 
+
+
 /**
  * A pipeline input coming from an image with no extra metadata. Only InputImage will be available.
  * No references to the surface are kept in the class and it may be freed after construction.
@@ -582,11 +620,15 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
     // TODO: Is it 100% correct to just copy the standard deviation in both dimensions?
     std::normal_distribution<decimal> perturbation1DDistribution(DECIMAL(0.0), perturbationStddev);
 
+    //-- My, lucius, way of adding fake stars --//
+
     Catalog catalogWithFalse = catalog;
 
     for (const CatalogStar &fs : fakeCatalog) {
         catalogWithFalse.push_back(fs);
-    } // my attempt at appending false stars idk maybe below is a random method. im introducing a targeted method. but it could be randomized.
+    } 
+
+    //-- The other way. --//
 
     std::uniform_real_distribution<decimal> uniformDistribution(DECIMAL(0.0), DECIMAL(1.0));
     std::uniform_int_distribution<int> magnitudeDistribution(falseStarMaxMagnitude, falseStarMinMagnitude);
@@ -598,6 +640,9 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
 
         catalogWithFalse.push_back(CatalogStar(ra, de, magnitude, -1));
     }
+
+    /* I think mine more clearly integrates with generation of multiple images, but after seeing how the above function works,
+       I essentially do it the same way, just with the persistence of a file. */
 
     for (int i = 0; i < (int)catalogWithFalse.size(); i++) {
         bool isTrueStar = i < (int)catalog.size();
@@ -783,6 +828,10 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
     imageData = std::vector<unsigned char>(image.width*image.height);
     image.image = imageData.data();
 
+    if (!brightnessLimit) {
+        std::cout << "NOTE: brightness limit is enabled. Pixel brightnesses may exceed maximum representable value." << std::endl;
+    }
+
 
     for (int i = 0; i < image.width * image.height; i++) {
         decimal curBrightness = 0;
@@ -826,7 +875,7 @@ GeneratedPipelineInput::GeneratedPipelineInput(const Catalog &catalog,
         
         if (!brightnessLimit) {
             // Keep the user informed. (Not in the loop to avoid spamming.)
-            std::cout << "Brightness limit disabled, resulting image may not be realistic." << std::endl;
+            
             clampedBrightness = std::max(std::min(curBrightness, DECIMAL(1.0)), DECIMAL(0.0));
         }
         else
@@ -904,7 +953,7 @@ PipelineInputList GetGeneratedPipelineInput(const PipelineOptions &values) {
         Catalog catalog;
 
         if (!values.fakeDatabase.empty()) {
-            catalog = specifiedCatalogRead(values.fakeDatabase);
+            catalog = CatalogRead(values.fakeDatabase);
         
         } 
 
