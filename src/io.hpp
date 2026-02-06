@@ -184,6 +184,10 @@ public:
     const Camera *InputCamera() const override { return &camera; };
     const Catalog &GetCatalog() const override { return catalog; };
 
+    //  tracking mode vector below
+    std::vector<decimal> trackingModeVector;
+
+
 private:
     Image image;
     Camera camera;
@@ -202,6 +206,9 @@ struct PipelineOutput {
     std::unique_ptr<Stars> stars = nullptr;
     std::unique_ptr<StarIdentifiers> starIds = nullptr;
     std::unique_ptr<Attitude> attitude = nullptr;
+
+    // tracking mode fake star pos, tuple (x,y)
+    std::vector<std::pair<decimal, decimal>> trackedStars;
 
     /// How many nanoseconds the centroiding stage of the pipeline took. Similarly for the other
     /// fields. If negative, the centroiding stage was not run.

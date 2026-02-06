@@ -34,6 +34,19 @@ LOST_CLI_OPTION("false-stars-estimate"     , int        , estimatedNumFalseStars
 LOST_CLI_OPTION("max-mismatch-probability" , decimal    , maxMismatchProb               , .001, STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
 LOST_CLI_OPTION("attitude-algo"            , std::string, attitudeAlgo                  , ""  , optarg                  , "dqm")
 
+LOST_CLI_OPTION("tracking-mode"     , bool    , trackingMode     , false , atobool(optarg) , true)
+
+
+LOST_CLI_OPTION("ra-velocity"        , decimal    , raVelocity              , 0 , STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
+LOST_CLI_OPTION("dec-velocity"        , decimal    , decVelocity              , 0 , STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
+LOST_CLI_OPTION("roll-velocity"        , decimal    , rollVelocity              , 0 , STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
+
+LOST_CLI_OPTION("last-ra"        , decimal    , lastRa              , -1 , STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
+LOST_CLI_OPTION("last-dec"        , decimal    , lastDec              , -1 , STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
+LOST_CLI_OPTION("last-roll"        , decimal    , lastRoll              , -1 , STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
+
+LOST_CLI_OPTION("time-between-frame" , decimal    , timeBetweenFrame              , -1  , STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
+
 // OUTPUT COMPARISON
 LOST_CLI_OPTION("centroid-compare-threshold", decimal    , centroidCompareThreshold, 2 , STR_TO_DECIMAL(optarg) , kNoDefaultArgument)
 LOST_CLI_OPTION("attitude-compare-threshold", decimal    , attitudeCompareThreshold, 1 , STR_TO_DECIMAL(optarg) , kNoDefaultArgument)
@@ -104,3 +117,5 @@ LOST_CLI_OPTION("regen-false-db"  , bool , regenFalseDb  , false , atobool(optar
 // could add regen options for mag,count,etc. but for now just regenerate everything with hard coded random limits
 
 LOST_CLI_OPTION("fake-database"  , std::string , fakeDatabase  , "" , optarg, kNoDefaultArgument)
+
+LOST_CLI_OPTION("image-dir"  , std::string , imageDir  , "" , optarg, kNoDefaultArgument)

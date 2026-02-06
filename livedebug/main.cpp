@@ -28,6 +28,9 @@
 #include "star-id.hpp"
 #include "star-utils.hpp"
 
+#include <dirent.h>
+
+
 
 #include <SFML/Graphics.hpp>
 
@@ -73,92 +76,153 @@ static void PipelineRun(const PipelineOptions &values) {
 static std::vector<dost_ImgData> PipelineRunSFML(PipelineOptions &values) {
     std::vector<dost_ImgData> returnData;
 
-    
-    // Force generation mode
-    values.generate = 1;
-
-    // Ensure at least one frame
-    if (values.frames < 1) values.frames = 1;
-
-    // If max is not set, set it to min. Obviously, if the user really wants to tween to zero, this may be problematic, but min = 0 and max >= 0 is a reasonable assumption.
-    if (values.rollMax == 0) values.rollMax = values.rollMin;
-    if (values.raMax == 0)   values.raMax   = values.raMin;
-    if (values.decMax == 0)  values.decMax  = values.decMin;
-
-
-
-
     // Force certain algorithms for current testing purposes.
     values.centroidAlgo = "cog";
     values.idAlgo = "py";
     values.attitudeAlgo = "dqm";
     values.databasePath = "my-database.dat";
 
+    // Set up Pipeline
+    Pipeline pipeline = SetPipeline(values);
 
-    if (values.regenFalseDb) {
-        // regenerate fake star database
-        std::cout << "Regenerating fake star database..." << std::endl;
-        UpdateFakeStarsFile("fakestars.tsv", values.generateFalseMinMag, values.generateFalseMaxMag);
-    }
+    if (values.imageDir != "") {
 
-    // Set up Pipeline and reserve space for each frame.
-    Pipeline pipeline = SetPipeline(values); 
+        // have images to test? no generation needed! feed the directory in to test a batch. ill make it so you can pass in one png later...
 
-    returnData.reserve(values.panning ? 1 : values.frames);
+        std::cout << "Processing images from: " << values.imageDir << std::endl;
+        values.generate = 0;
+        values.frames = 0;
 
+        DIR *dir;
+        struct dirent *ent;
 
-    int startFrame = 0;
-    if (values.panning) {
-        startFrame = values.frames - 1;
-    }
+        // Try to open the directory
+        if ((dir = opendir(values.imageDir.c_str())) != NULL) {
+            
+            // Loop through all files in the directory
+            while ((ent = readdir(dir)) != NULL) {
+                values.frames += 1; // count files for info
+                std::string filename = ent->d_name;
 
-    // Generate frame by frame.
-    for (int frame = startFrame; frame < values.frames; frame++) {
-        std::cout << "Processing frame: " << frame << "\n";
+                // Skip "." and ".." directories
+                if (filename == "." || filename == "..") continue;
 
-        // Logic for interpolation (works for both cases because if panning, Min==Max)
-        double t = (values.frames > 1) ? (double)frame / (values.frames - 1) : 0.0;
+                // Check for .png extension manually
+                if (filename.length() >= 4 && 
+                    filename.substr(filename.length() - 4) == ".png") {
 
-        values.generateRoll = values.rollMin + t * (values.rollMax - values.rollMin);
-        values.generateRa   = values.raMin   + t * (values.raMax   - values.raMin);
-        values.generateDe   = values.decMin  + t * (values.decMax  - values.decMin);
+                    // Construct full path: directory + / + filename
+                    values.png = values.imageDir + "/" + filename;
+                    
+                    std::cout << "Loading: " << values.png << std::endl;
 
-        // Naming convention
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04d.png", frame);
-        values.plotRawInput = std::string(buffer);
+                    // Run Pipeline
+                    PipelineInputList input = GetPipelineInput(values);
+                    std::vector<PipelineOutput> outputs = pipeline.Go(input);
 
-        // Run Pipeline
-        PipelineInputList input = GetPipelineInput(values);
-        std::vector<PipelineOutput> outputs = pipeline.Go(input);
+                    if (!outputs.empty()) {
+                        const auto& out = outputs[0];
+                        dost_ImgData imgData;
 
-        if (outputs.empty()) continue;
+                        if (out.attitude) imgData.attitude = *out.attitude;
+                        if (out.stars)    imgData.stars    = *out.stars;
 
-        const auto& out = outputs[0];
-        dost_ImgData imgData;
-        
-        if (out.attitude) imgData.attitude = *out.attitude;
-        if (out.stars)    imgData.stars    = *out.stars;
+                        if (out.starIds && !out.catalog.empty()) {
+                            for (const StarIdentifier &id : *out.starIds) {
+                                imgData.starIds.emplace_back(id.starIndex, id.catalogIndex);
+                            }
+                        }
 
-        if (out.starIds && !out.catalog.empty()) {
-            for (const StarIdentifier &id : *out.starIds) {
-                imgData.starIds.emplace_back(id.starIndex, id.catalogIndex);
+                        imgData.resx = input[0]->InputImage()->width;
+                        imgData.resy = input[0]->InputImage()->height;
+
+                        // No truth data in image mode
+                        imgData.trueRa   = 0;
+                        imgData.trueDec  = 0;
+                        imgData.trueRoll = 0;
+
+                        imgData.trackedStars = out.trackedStars;
+
+                        returnData.push_back(imgData);
+
+                        PipelineComparison(input, outputs, values);
+                    }
+                }
             }
+            closedir(dir);
+        } else {
+            std::cerr << "Error: Could not open directory " << values.imageDir << std::endl;
         }
 
-        imgData.trueRa   = values.generateRa;
-        imgData.trueDec  = values.generateDe;
-        imgData.trueRoll = values.generateRoll;
+    } else {
 
-        returnData.push_back(imgData);
+        // generate mode, standard!
 
-        // Only print comparison for the frame being generated
-        PipelineComparison(input, outputs, values); 
+        values.generate = 1;
+
+        if (values.frames < 1) values.frames = 1;
+        if (values.rollMax == 0) values.rollMax = values.rollMin;
+        if (values.raMax == 0)   values.raMax   = values.raMin;
+        if (values.decMax == 0)  values.decMax  = values.decMin;
+
+        
+
+        if (values.regenFalseDb) {
+            std::cout << "Regenerating fake star database..." << std::endl;
+            UpdateFakeStarsFile("fakestars.tsv", values.generateFalseMinMag, values.generateFalseMaxMag);
+        }
+
+        returnData.reserve(values.panning ? 1 : values.frames);
+
+        int startFrame = 0;
+        if (values.panning) startFrame = values.frames - 1;
+
+        for (int frame = startFrame; frame < values.frames; frame++) {
+            std::cout << "Processing frame: " << frame << "\n";
+
+            double t = (values.frames > 1) ? (double)frame / (values.frames - 1) : 0.0;
+
+            values.generateRoll = values.rollMin + t * (values.rollMax - values.rollMin);
+            values.generateRa   = values.raMin   + t * (values.raMax   - values.raMin);
+            values.generateDe   = values.decMin  + t * (values.decMax  - values.decMin);
+
+            char buffer[256];
+            snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04d.png", frame);
+            values.plotRawInput = std::string(buffer);
+
+            PipelineInputList input = GetPipelineInput(values);
+            std::vector<PipelineOutput> outputs = pipeline.Go(input);
+
+            if (outputs.empty()) continue;
+
+            const auto& out = outputs[0];
+            dost_ImgData imgData;
+            
+            if (out.attitude) imgData.attitude = *out.attitude;
+            if (out.stars)    imgData.stars    = *out.stars;
+
+            if (out.starIds && !out.catalog.empty()) {
+                for (const StarIdentifier &id : *out.starIds) {
+                    imgData.starIds.emplace_back(id.starIndex, id.catalogIndex);
+                }
+            }
+
+            imgData.trueRa   = values.generateRa;
+            imgData.trueDec  = values.generateDe;
+            imgData.trueRoll = values.generateRoll;
+
+            imgData.resx = values.generateXRes;
+            imgData.resy = values.generateYRes;
+
+            imgData.trackedStars = out.trackedStars;
+
+            returnData.push_back(imgData);
+            PipelineComparison(input, outputs, values); 
+        }
     }
 
     return returnData;
 }
-
 
 // DO NOT DELETE
 // static void PipelineBenchmark() {
@@ -216,6 +280,56 @@ bool atobool(const char *cstr) {
         return false;
     }
     assert(false);
+}
+
+struct TextureInfo {
+    sf::Texture texture;
+    float scaleFactor; // 1.0 = Original, 0.5 = Half Size, etc.
+};
+
+TextureInfo LoadTextureSafe(const std::string& filepath) {
+    sf::Image rawImage;
+    if (!rawImage.loadFromFile(filepath)) {
+        std::cerr << "Error: File not found: " << filepath << std::endl;
+        return {sf::Texture(), 1.0f};
+    }
+
+    unsigned int maxDim = sf::Texture::getMaximumSize(); // e.g. 4096
+    sf::Vector2u imgSize = rawImage.getSize();
+
+    // If image is within limits, load normally
+    if (imgSize.x <= maxDim && imgSize.y <= maxDim) {
+        sf::Texture tex;
+        tex.loadFromImage(rawImage);
+        return {tex, 1.0f};
+    }
+
+    // --- DOWNSCALING LOGIC ---
+    // Calculate how much we need to shrink to fit GPU
+    float scale = (float)maxDim / std::max(imgSize.x, imgSize.y);
+    unsigned int newW = (unsigned int)(imgSize.x * scale);
+    unsigned int newH = (unsigned int)(imgSize.y * scale);
+    
+    std::cout << "[GPU LIMIT] Downscaling " << imgSize.x << "x" << imgSize.y 
+              << " -> " << newW << "x" << newH << " (Scale: " << scale << ")" << std::endl;
+
+    // Create resized image (Nearest Neighbor is fast & preserves star crispness)
+    sf::Image resized;
+    resized.create(newW, newH);
+    const uint8_t* srcPixels = rawImage.getPixelsPtr();
+    
+    // Simple pixel mapping loop
+    for (unsigned int y = 0; y < newH; y++) {
+        for (unsigned int x = 0; x < newW; x++) {
+            int srcX = (int)(x / scale);
+            int srcY = (int)(y / scale);
+            resized.setPixel(x, y, rawImage.getPixel(srcX, srcY));
+        }
+    }
+
+    sf::Texture tex;
+    tex.loadFromImage(resized);
+    return {tex, scale};
 }
 
 /**
@@ -415,40 +529,80 @@ static int LostMain(int argc, char **argv) {
         // SFML Setup
         // --------------------------------------
         // Initiate window and frame image holders.
-        sf::RenderWindow window(sf::VideoMode(1024, 1024), "LOST Animation");
+
+        // check the resolution of a given photo. can we resize upon frame change? sfml limit testing!
+
+
+        int maxResY = sf::VideoMode::getDesktopMode().height - 200;
+
+        for (int i = 0; i < (int)imgData.size(); i++) {
+            // FIX 1: Float cast to preserve aspect ratio
+            float aspect = static_cast<float>(imgData[i].resx) / static_cast<float>(imgData[i].resy);
+            
+            int imgMaxResY = std::min(imgData[i].resy, maxResY);
+            imgData[i].realResy = imgMaxResY;
+            imgData[i].realResx = static_cast<int>(imgMaxResY * aspect);
+        }
+
+        sf::RenderWindow window(sf::VideoMode(imgData[0].realResx, imgData[0].realResy), "LOST Animation");
+
+        
 
         // Hold textures in deque to prevent invalidation on push_back
         std::deque<sf::Texture> textures;
         std::vector<sf::Sprite> sprites;
+        std::vector<float> scaleFactors;
 
         sprites.reserve(pipelineOptions.frames);
 
         bool showStarBoxes = true;
 
-        // Load images.
-        for (int frame = 0; frame < pipelineOptions.frames; frame++) {
-            char buffer[256];
-            snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04d.png", frame);
+        std::vector<std::string> filePaths;
 
-            sf::Texture tex;
-            if (!tex.loadFromFile(buffer)) {
-                std::cerr << "Failed to load " << buffer << "\n";
-                continue;
+        if (!pipelineOptions.imageDir.empty()) {
+
+            DIR *dir;
+            struct dirent *ent;
+            if ((dir = opendir(pipelineOptions.imageDir.c_str())) != NULL) {
+                while ((ent = readdir(dir)) != NULL) {
+                    std::string filename = ent->d_name;
+
+                    if (filename == "." || filename == "..") continue;
+
+ 
+                    if (filename.length() >= 4 && filename.substr(filename.length() - 4) == ".png") {
+                        filePaths.push_back(pipelineOptions.imageDir + "/" + filename);
+                    }
+                }
+                closedir(dir);
             }
 
-            textures.push_back(tex);              
-            sprites.emplace_back();               
+        } else {
+
+            for (int frame = 0; frame < pipelineOptions.frames; frame++) {
+                char buffer[256];
+                snprintf(buffer, sizeof(buffer), "sfml-tests/frame_%04d.png", frame);
+                filePaths.push_back(std::string(buffer));
+            }
+        }
+
+
+        // Load Images into Textures/Sprites
+
+
+        for (const std::string& path : filePaths) {
+            
+            TextureInfo info = LoadTextureSafe(path);
+            
+            textures.push_back(info.texture);
+            scaleFactors.push_back(info.scaleFactor); // Save the scale!
+
+            sprites.emplace_back();
             sprites.back().setTexture(textures.back());
         }
 
         int image_idx = 0;
 
-        // Center each sprite
-        for (auto& spr : sprites) {
-            sf::FloatRect r = spr.getLocalBounds();
-            spr.setOrigin(r.width / 2, r.height / 2);
-            spr.setPosition(512, 512);
-        }
 
             
         sf::Font font;
@@ -512,6 +666,7 @@ static int LostMain(int argc, char **argv) {
 
                         UpdateHUD(image_idx);
 
+                        window.setSize(sf::Vector2u(imgData[image_idx].realResx, imgData[image_idx].realResy)); // resize window to fit new image
 
                         sfml::UpdateStarCatalogMapping(imgData[image_idx], starToCatalogIndex);
 
@@ -521,6 +676,10 @@ static int LostMain(int argc, char **argv) {
                         image_idx = (image_idx - 1 + sprites.size()) % sprites.size(); // backward wrap
 
                         UpdateHUD(image_idx);
+
+
+
+                        window.setSize(sf::Vector2u(imgData[image_idx].realResx, imgData[image_idx].realResy)); // resize window to fit new imagere
 
 
                         sfml::UpdateStarCatalogMapping(imgData[image_idx], starToCatalogIndex);
@@ -606,10 +765,12 @@ static int LostMain(int argc, char **argv) {
             window.clear();
 
 
-
+            sf::View worldView(sf::FloatRect(0.f, 0.f, (float)imgData[image_idx].resx, (float)imgData[image_idx].resy));
+            window.setView(worldView);
 
             window.draw(sprites[image_idx]);
-            window.draw(text);
+
+            float s = scaleFactors[image_idx];
 
             auto& stars = imgData[image_idx].stars;
             auto& starIds = imgData[image_idx].starIds;
@@ -665,6 +826,19 @@ static int LostMain(int argc, char **argv) {
                     window.draw(line, 2, sf::Lines);
                 }
             }
+
+            for (const auto& trackedStar : imgData[image_idx].trackedStars) {
+                sf::CircleShape circle(10.f);
+                circle.setFillColor(sf::Color::Transparent);
+                circle.setOutlineColor(sf::Color::Red);
+                circle.setOutlineThickness(2.f);
+                circle.setOrigin(10.f, 10.f); // center the circle on the star
+                circle.setPosition(trackedStar.first, trackedStar.second);
+                window.draw(circle);
+            }
+
+            window.setView(window.getDefaultView());
+            window.draw(text);
 
             window.display();
 

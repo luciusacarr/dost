@@ -478,6 +478,21 @@ PipelineInputList GetPngPipelineInput(const PipelineOptions &values) {
     decimal focalLengthPixels = FocalLengthFromOptions(values, xResolution);
     Camera cam = Camera(focalLengthPixels, xResolution, yResolution);
 
+    // GetTrackingModeInputAttitude Vector
+    if (values.trackingMode) {
+        // track vectot
+        /*decimal raVelocity = DegToRad(values.raVelocity);
+        decimal decVelocity = DegToRad(values.decVelocity);
+        decimal rollVelocity = DegToRad(values.rollVelocity);
+        decimal timeBetweenFrame = values.timeBetweenFrame;
+        // last attitude vector
+        decimal lastRa = DegToRad(values.lastRa);
+        decimal lastDec = DegToRad(values.lastDec);
+        decimal lastRoll = DegToRad(values.lastRoll);
+
+        cam.SetTrackingModeInputAttitude({lastRa, lastDec, lastRoll, raVelocity, decVelocity, rollVelocity, timeBetweenFrame});
+    */}
+
     result.push_back(std::unique_ptr<PipelineInput>(new PngPipelineInput(cairoSurface, cam, CatalogRead())));
     cairo_surface_destroy(cairoSurface);
     return result;
@@ -980,7 +995,15 @@ PipelineInputList GetGeneratedPipelineInput(const PipelineOptions &values) {
                 (values.generateCutoffMag * 100),
                 values.generatePerturbationStddev,
                 catalog,
-                values.brightnessLimit);
+                values.brightnessLimit,
+                values.lastRa,
+                values.lastDec,
+                values.lastRoll,
+                values.raVelocity,
+                values.decVelocity,
+                values.rollVelocity,
+                values.timeBetweenFrame
+                );
 
 
 
@@ -1182,17 +1205,110 @@ PipelineOutput Pipeline::Go(const PipelineInput &input) {
         std::cout << "Issue found..." << std::endl;
     }
 
-    if (starIdAlgorithm && database && inputStars && input.InputCamera()) {
-        // TODO: don't copy the vector!
-        std::chrono::time_point<std::chrono::steady_clock> start = std::chrono::steady_clock::now();
+    if (database && inputStars && input.InputCamera()) {
 
-        result.starIds = std::unique_ptr<StarIdentifiers>(new std::vector<StarIdentifier>(
-            starIdAlgorithm->Go(database.get(), *inputStars, result.catalog, *input.InputCamera())));
+        bool canTrack = input.trackingMode && (input.lastRa != -1 || input.lastDec != -1 || input.lastRoll != -1 || input.timeBetweenFrame != -1);
 
-        std::chrono::time_point<std::chrono::steady_clock> end = std::chrono::steady_clock::now();
-        result.starIdTimeNs = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        if (!canTrack && input.trackingMode) {
+            std::cerr << "ERROR: Tracking mode is enabled, but one or more required tracking parameters are missing (lastRa, lastDec, lastRoll, or timeBetweenFrame)." << std::endl;
+            exit(1);
+        }
 
-        inputStarIds = result.starIds.get();
+        if (canTrack) {
+
+            decimal estimatedRa = input.lastRa + input.timeBetweenFrame * input.raVelocity;
+            decimal estimatedDec = input.lastDec + input.timeBetweenFrame * input.decVelocity;
+            decimal estimatedRoll = input.lastRoll + input.timeBetweenFrame * input.rollVelocity;
+                
+            Quaternion predictedQuat = SphericalToQuaternion(estimatedRa, estimatedDec, estimatedRoll);
+
+            // 2. Calculate Camera Intrinsics (Manually, since Camera class is minimal)
+            decimal width = (decimal)inputImage->width; 
+            decimal height = (decimal)inputImage->height;
+            decimal cx = width / DECIMAL(2.0);
+            decimal cy = height / DECIMAL(2.0);
+            
+            // Retrieve FOV (Assumes fov is stored in input or input.InputCamera())
+            // If your camera has fov_x, use that.
+            decimal fov = input.InputCamera()->fov_x; 
+            decimal fx = cx / DECIMAL_TAN(fov / DECIMAL(2.0));
+            decimal fy = fx; // Square pixels
+
+            // 3. Prepare Output Container
+            auto trackedIds = std::unique_ptr<StarIdentifiers>(new std::vector<StarIdentifier>());
+
+            // 4. THE LOOP (Iterate all stars)
+            // Since CatalogStar doesn't store RA, we skip the binary search.
+            // The rotation math below is fast enough for <10,000 stars.
+            
+            // pointer to start of vector (for index calculation)
+            const CatalogStar* catalogBase = &result.catalog[0]; 
+
+            for (const CatalogStar &catStar : result.catalog) {
+
+                // --- STEP 1: Rotate to Body Frame ---
+                // NO CONVERSION NEEDED: catStar.spatial is already the 3D inertial vector!
+                Vec3 starBody = predictedQuat.Rotate(catStar.spatial);
+
+                // --- STEP 2: Z-Check (Behind Camera?) ---
+                if (starBody.z <= DECIMAL(0.0)) continue; 
+
+                // --- STEP 3: Project to Pixels ---
+                decimal projectedX = (starBody.x / starBody.z) * fx + cx;
+                decimal projectedY = (starBody.y / starBody.z) * fy + cy;
+                
+                // --- STEP 4: Sensor Bounds Check ---
+                if (projectedX < 0 || projectedX >= width || 
+                    projectedY < 0 || projectedY >= height) continue;
+
+                // --- STEP 5: Nearest Neighbor Matching ---
+                decimal bestDistSq = DECIMAL(25.0); // 5 pixel radius squared
+                int bestIndex = -1;
+
+                for (size_t i = 0; i < inputStars->size(); ++i) {
+                    const Star &centroid = (*inputStars)[i];
+                    decimal dx = centroid.position.x - projectedX;
+                    decimal dy = centroid.position.y - projectedY;
+                    decimal distSq = dx*dx + dy*dy;
+
+                    if (distSq < bestDistSq) {
+                        bestDistSq = distSq;
+                        bestIndex = i;
+                    }
+                }
+
+                // --- STEP 6: Store Match ---
+                if (bestIndex != -1) {
+                    // Pointer arithmetic to get the integer index in the catalog vector
+                    int catIndex = (int)(&catStar - catalogBase);
+                    
+                    // Use the constructor: StarIdentifier(starIndex, catalogIndex)
+                    StarIdentifier id(bestIndex, catIndex);
+                    trackedIds->push_back(id);
+                }
+            }
+
+            result.trackedStars = std::move(*trackedIds);
+            inputStarIds = result.starIds.get();
+
+
+            // if we fail we need to redo the star-id algorithm with the full catalog.
+            // implementation will come later, but for now we just miss our determination in case of failure.
+
+
+        }
+        else if (starIdAlgorithm && database && inputStars && input.InputCamera()) {
+            // TODO: don't copy the vector!
+            std::chrono::time_point<std::chrono::steady_clock> start = std::chrono::steady_clock::now();
+
+            result.starIds = std::unique_ptr<StarIdentifiers>(new std::vector<StarIdentifier>(
+                starIdAlgorithm->Go(database.get(), *inputStars, result.catalog, *input.InputCamera())));
+
+            std::chrono::time_point<std::chrono::steady_clock> end = std::chrono::steady_clock::now();
+            result.starIdTimeNs = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
+            inputStarIds = result.starIds.get();
+        }
     } else if (starIdAlgorithm) {
         std::cerr << "ERROR: Star ID algorithm specified but cannot run because database, centroids, or camera are missing." << std::endl;
         exit(1);
