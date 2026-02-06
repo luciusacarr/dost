@@ -13,6 +13,13 @@ struct dost_ImgData {
     std::vector<lost::Star> stars; 
     std::vector<std::pair<int,int>> starIds;
 
+
+    int realResx;
+    int realResy;
+
+    int resx;
+    int resy;
+
     double trueRa;
     double trueDec;
     double trueRoll;

@@ -104,3 +104,5 @@ LOST_CLI_OPTION("regen-false-db"  , bool , regenFalseDb  , false , atobool(optar
 // could add regen options for mag,count,etc. but for now just regenerate everything with hard coded random limits
 
 LOST_CLI_OPTION("fake-database"  , std::string , fakeDatabase  , "" , optarg, kNoDefaultArgument)
+
+LOST_CLI_OPTION("image-dir"  , std::string , imageDir  , "" , optarg, kNoDefaultArgument)
