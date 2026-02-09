@@ -644,6 +644,11 @@ static int LostMain(int argc, char **argv) {
         text.setPosition(margin, margin);
 
 
+        float currentZoom = 1.0f;
+        bool isDragging = false;
+        sf::Vector2f oldMousePos;
+        sf::Vector2f viewCenter;
+
         
         // --------------------------------------
         // Main loop
@@ -653,15 +658,56 @@ static int LostMain(int argc, char **argv) {
             sf::Event event;
             while (window.pollEvent(event))
             {
+
+                                // 1. MOUSE WHEEL ZOOM
+                if (event.type == sf::Event::MouseWheelScrolled) {
+                    if (event.mouseWheelScroll.delta > 0) {
+                        currentZoom *= 0.9f; // Zoom In
+                    } else {
+                        currentZoom *= 1.1f; // Zoom Out
+                    }
+                }
+
+                // 2. MOUSE DRAG PANNING (Middle Click or Left Click)
+                if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+                    isDragging = true;
+                    // Store where we clicked in "Screen Coordinates"
+                    oldMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                }
+
+                if (event.type == sf::Event::MouseButtonReleased && event.mouseButton.button == sf::Mouse::Left) {
+                    isDragging = false;
+                }
+
+                if (event.type == sf::Event::MouseMoved && isDragging) {
+                    // Determine how much the mouse moved in World Coordinates
+                    const sf::Vector2f newMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                    const sf::Vector2f delta = oldMousePos - newMousePos;
+                    
+                    // Move the camera center
+                    viewCenter += delta;
+                    
+                    // Update "old" pos for next frame. Note: We must re-map because the view moved!
+                    oldMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                }
+
+
                 if (event.type == sf::Event::Closed)
                     window.close();
 
-                if (event.type == sf::Event::KeyPressed)
-                {
+                if (event.type == sf::Event::KeyPressed) {
+
+
+
+
+                    
                     if (event.key.code == sf::Keyboard::Right) {
                         image_idx = (image_idx + 1) % sprites.size();     // forward wrap
 
                         UpdateHUD(image_idx);
+
+                        currentZoom = 1.0f;
+                        viewCenter = sf::Vector2f(imgData[image_idx].resx / 2.0f, imgData[image_idx].resy / 2.0f);
 
                         window.setSize(sf::Vector2u(imgData[image_idx].realResx, imgData[image_idx].realResy)); // resize window to fit new image
 
@@ -674,7 +720,8 @@ static int LostMain(int argc, char **argv) {
 
                         UpdateHUD(image_idx);
 
-
+                        currentZoom = 1.0f;
+                        viewCenter = sf::Vector2f(imgData[image_idx].resx / 2.0f, imgData[image_idx].resy / 2.0f);
 
                         window.setSize(sf::Vector2u(imgData[image_idx].realResx, imgData[image_idx].realResy)); // resize window to fit new imagere
 
@@ -762,10 +809,24 @@ static int LostMain(int argc, char **argv) {
             window.clear();
 
 
-            sf::View worldView(sf::FloatRect(0.f, 0.f, (float)imgData[image_idx].resx, (float)imgData[image_idx].resy));
-            window.setView(worldView);
+            // 1. SETUP VIEW
+            float imgW = (float)imgData[image_idx].resx;
+            float imgH = (float)imgData[image_idx].resy;
 
+            sf::View worldView(sf::FloatRect(0.f, 0.f, imgW, imgH));
+
+            // Apply our custom Zoom and Panning
+            worldView.setSize(imgW * currentZoom, imgH * currentZoom);
+            worldView.setCenter(viewCenter);
+
+            window.setView(worldView);
             window.draw(sprites[image_idx]);
+
+            // 2. CALCULATE DYNAMIC VIEW SCALE
+            // Logic: (Image Width * ZoomFactor) / Window Width
+            // This ensures UI stays the same size on screen regardless of zoom level
+            float viewScale = (imgW * currentZoom) / (float)window.getSize().x;
+            if (viewScale < 0.001f) viewScale = 0.001f; // Safety
 
             float s = scaleFactors[image_idx];
 
@@ -787,6 +848,11 @@ static int LostMain(int argc, char **argv) {
 
             if (count > 0) { // A center exists
                 center = sf::Vector2f(sum.x / count, sum.y / count);
+            }
+
+            viewScale = 1.0f;
+            if (window.getSize().x > 0) {
+                viewScale = (float)imgData[image_idx].resx / (float)window.getSize().x;
             }
 
 
@@ -819,6 +885,15 @@ static int LostMain(int argc, char **argv) {
                     
                     sf::Text starText = sfml::CreateStarLabel(star, pairindex, starsNames, font);
                     
+                    // Text size should be based on view scale to maintain readability across zoom levels
+
+                    starText.setCharacterSize((unsigned int)(18 * viewScale*std::max(currentZoom, 0.2f))); // Base size 18, scaled by viewScale, and divided by currentZoom to counteract zooming
+                                        
+                    // Fix Position Offset (move text further away for big stars)
+
+                    float offset = (star.radiusX * 8 + 4) * viewScale*std::max(currentZoom, 0.1f)*std::max(currentZoom, 0.1f); // Base offset 4, scaled by star size and viewScale, and divided by currentZoom to counteract zooming
+                    starText.setPosition(star.position.x - offset, star.position.y - offset);
+
                     window.draw(starText);
                     window.draw(line, 2, sf::Lines);
                 }
