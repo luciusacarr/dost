@@ -34,6 +34,10 @@ LOST_CLI_OPTION("false-stars-estimate"     , int        , estimatedNumFalseStars
 LOST_CLI_OPTION("max-mismatch-probability" , decimal    , maxMismatchProb               , .001, STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
 LOST_CLI_OPTION("attitude-algo"            , std::string, attitudeAlgo                  , ""  , optarg                  , "dqm")
 
+// TRACKING COMPONENTS
+LOST_CLI_OPTION("tracking-mode"     , bool    , trackingMode     , false , atobool(optarg) , true)
+LOST_CLI_OPTION("time-between-frame" , decimal    , timeBetweenFrame              , -1  , STR_TO_DECIMAL(optarg)  , kNoDefaultArgument)
+
 // OUTPUT COMPARISON
 LOST_CLI_OPTION("centroid-compare-threshold", decimal    , centroidCompareThreshold, 2 , STR_TO_DECIMAL(optarg) , kNoDefaultArgument)
 LOST_CLI_OPTION("attitude-compare-threshold", decimal    , attitudeCompareThreshold, 1 , STR_TO_DECIMAL(optarg) , kNoDefaultArgument)
@@ -80,3 +84,5 @@ LOST_CLI_OPTION("generate-perturb-centroids"  , decimal , generatePerturbationSt
 LOST_CLI_OPTION("generate-cutoff-mag"         , decimal , generateCutoffMag         , 6.0   , STR_TO_DECIMAL(optarg)    , kNoDefaultArgument)
 LOST_CLI_OPTION("generate-seed"               , int     , generateSeed              , 394859, atoi(optarg)    , kNoDefaultArgument)
 LOST_CLI_OPTION("generate-time-based-seed"    , bool    , timeSeed                  , false , atobool(optarg) , true)
+
+LOST_CLI_OPTION("image-dir"  , std::string , imageDir  , "" , optarg, kNoDefaultArgument)

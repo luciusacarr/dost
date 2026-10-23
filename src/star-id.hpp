@@ -6,6 +6,8 @@
 #include "centroiders.hpp"
 #include "star-utils.hpp"
 #include "camera.hpp"
+#include "spatial-hash.hpp"
+#include "kalman-filter.hpp"
 
 namespace lost {
 
@@ -68,6 +70,65 @@ private:
     int numFalseStars;
     decimal maxMismatchProbability;
     long cutoff;
+};
+
+/**
+ * Utilizes previous information to solve for ID's in constant time.
+ */
+class TrackingMode final : public StarIdAlgorithm {
+public:
+    std::vector<std::pair<StarIdentifier, Vec2>> GetProjections(
+            const unsigned char * database, 
+            const Stars & stars, 
+            const Catalog &catalog, 
+            const Camera &camera,
+            int &outWindowSize) const;
+
+    StarIdentifiers Go(const unsigned char *database, const Stars &stars, const Catalog &catalog, const Camera &camera) const override;
+    /**
+     * @param tolerance Angular tolerance (Two inter-star distances are considered the same if within this many radians)
+     * @param numFalseStars an estimate of the number of false stars in the whole celestial sphere
+     * (not just the field of view). Eg, if you estimate 10 dead pixels in a 40 degree FOV, you'd
+     * want to multiply that up to a hundred-something numFalseStars.
+     * @param maxMismatchProbability The maximum allowable probability for any star to be mis-id'd.
+     * @param cutoff Maximum number of pyramids to iterate through before giving up.
+     */
+
+     void UpdateTrackingVector(const std::pair<Quaternion, decimal>& newTvec) {
+        this->trackingVector = newTvec; 
+    }
+
+    void UpdateEKF(const Quaternion& measuredAttitude) {
+        ekf.Update(measuredAttitude);
+    }
+
+    void ResetEKF(const Quaternion& newGlobalFix) {
+        ekf.Reset(newGlobalFix);
+        isEkfInitialized = true;
+        missedFrames = 0;
+    }
+
+    int missedFrames = 0;
+
+
+
+    TrackingMode(decimal tolerance, int numFalseStars, decimal maxMismatchProbability, long cutoff, std::pair<Quaternion, decimal> trackingVector)
+        : tolerance(tolerance), numFalseStars(numFalseStars),
+          maxMismatchProbability(maxMismatchProbability), cutoff(cutoff),
+          trackingVector(trackingVector) { };
+private:
+    decimal tolerance;
+    int numFalseStars;
+    decimal maxMismatchProbability;
+    long cutoff;
+    std::pair<Quaternion, decimal> trackingVector;
+
+
+    mutable SpatialHash spatialHash; 
+    mutable bool isSpatialHashBuilt = false;
+
+    mutable AttitudeEKF ekf;
+    mutable bool isEkfInitialized = false;
 };
 
 }

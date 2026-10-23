@@ -13,6 +13,7 @@
 #include <sstream>
 #include <iostream>
 #include <memory>
+#include <dirent.h>
 
 
 #ifndef CAIRO_HAS_PNG_FUNCTIONS
@@ -44,9 +45,9 @@ private:
     bool isFstream;
     std::ostream *stream;
 };
-
 // use the environment variable LOST_BSC_PATH, or read from ./bright-star-catalog.tsv
 const Catalog &CatalogRead();
+
 // Convert a cairo surface to array of grayscale bytes
 unsigned char *SurfaceToGrayscaleImage(cairo_surface_t *cairoSurface);
 cairo_surface_t *GrayscaleImageToSurface(const unsigned char *, const int width, const int height);
@@ -163,6 +164,8 @@ typedef std::vector<std::unique_ptr<PipelineInput>> PipelineInputList;
 
 PipelineInputList GetPipelineInput(const PipelineOptions &values);
 
+std::vector<std::string> GetImagesInDirectory(const std::string &directoryPath);
+
 /// A pipeline input created by reading a PNG from a file on disk.
 class PngPipelineInput : public PipelineInput {
 public:
@@ -246,7 +249,10 @@ private:
     int centroidMinMagnitude = 0;
     int centroidMinStars = 0;
 
+    bool tracking = false;
+
     std::unique_ptr<StarIdAlgorithm> starIdAlgorithm;
+    std::unique_ptr<StarIdAlgorithm> trackingAlgorithm;
     std::unique_ptr<AttitudeEstimationAlgorithm> attitudeEstimationAlgorithm;
     std::unique_ptr<unsigned char[]> database;
 };

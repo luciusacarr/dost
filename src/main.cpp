@@ -51,10 +51,32 @@ static void DatabaseBuild(const DatabaseOptions &values) {
 
 /// Run a star-tracking pipeline (possibly including generating inputs and analyzing outputs) based on command line options in \p values.
 static void PipelineRun(const PipelineOptions &values) {
-    PipelineInputList input = GetPipelineInput(values);
     Pipeline pipeline = SetPipeline(values);
-    std::vector<PipelineOutput> outputs = pipeline.Go(input);
-    PipelineComparison(input, outputs, values);
+
+    if (values.imageDir != "") {
+        std::vector<std::string> validFiles = GetImagesInDirectory(values.imageDir);
+
+        if (validFiles.size() == 0) {
+            std::cerr << "No valid PNG files found in directory " << values.imageDir << "... terminating." << std::endl;
+            exit(1);
+        }
+
+        for (const std::string& filename : validFiles) {
+            PipelineOptions workingValues = values; 
+
+            workingValues.png = values.imageDir + "/" + filename;
+
+            PipelineInputList input = GetPipelineInput(workingValues);
+            
+            std::vector<PipelineOutput> outputs = pipeline.Go(input);
+            PipelineComparison(input, outputs, values);
+        }
+    } else {
+        PipelineInputList input = GetPipelineInput(values);
+        std::vector<PipelineOutput> outputs = pipeline.Go(input);
+
+        PipelineComparison(input, outputs, values);
+    }
 }
 
 // DO NOT DELETE
@@ -237,6 +259,8 @@ static int LostMain(int argc, char **argv) {
                     exit(1);
             }
         }
+
+
 
         lost::PipelineRun(pipelineOptions);
 

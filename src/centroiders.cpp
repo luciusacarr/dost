@@ -107,6 +107,52 @@ int BasicThresholdOnePass(unsigned char *image, int imageWidth, int imageHeight)
     return mean + (std * 5);
 }
 
+int LocalAnnulusThreshold(unsigned char *image, int width, int height, int px, int py, int halfWin) {
+    long totalMag = 0;
+    long sq_totalMag = 0;
+    int count = 0;
+
+    int exclusionRadius = halfWin / 2;
+
+    auto processRegion = [&](int startX, int endX, int startY, int endY) {
+        startX = std::max(0, startX);
+        endX = std::min(width - 1, endX);
+        startY = std::max(0, startY);
+        endY = std::min(height - 1, endY);
+
+        for (int y = startY; y <= endY; ++y) {
+            int rowOffset = y * width;
+            for (int x = startX; x <= endX; ++x) {
+                unsigned char val = image[rowOffset + x];
+                totalMag += val;
+                sq_totalMag += val * val;
+                count++;
+            }
+        }
+    };
+
+    processRegion(px - halfWin, px + halfWin, 
+                  py - halfWin, py - exclusionRadius - 1);
+
+    processRegion(px - halfWin, px - exclusionRadius - 1, 
+                  py - exclusionRadius, py + exclusionRadius);
+
+    processRegion(px + exclusionRadius + 1, px + halfWin, 
+                  py - exclusionRadius, py + exclusionRadius);
+
+    processRegion(px - halfWin, px + halfWin, 
+                  py + exclusionRadius + 1, py + halfWin);
+
+    if (count == 0) return 0;
+
+    decimal mean = static_cast<decimal>(totalMag) / count;
+    decimal variance = (static_cast<decimal>(sq_totalMag) / count) - (mean * mean);
+    if (variance < 0) variance = 0; 
+    
+    decimal std = DECIMAL_SQRT(variance);
+    return mean + (std * 5); 
+}
+
 struct CentroidParams {
     decimal yCoordMagSum = 0;
     decimal xCoordMagSum = 0;
@@ -307,4 +353,144 @@ Stars IterativeWeightedCenterOfGravityAlgorithm::Go(unsigned char *image, int im
     return result;
 }
 
+struct Point { int x, y; };
+
+std::pair<StarIdentifiers, Stars> WindowedCenterOfGravity::Go(unsigned char *image, int width, int height, 
+                                                 const std::vector<std::pair<StarIdentifier, Vec2>> &projections) const {
+    StarIdentifiers foundIds;
+    Stars foundStars;
+    
+
+    foundIds.reserve(projections.size());
+    foundStars.reserve(projections.size());
+
+    int halfWin = windowSize / 2;
+
+
+    std::vector<Point> stack;
+    stack.reserve(windowSize * windowSize);
+
+
+
+
+
+    for (size_t i = 0; i < projections.size(); ++i) {
+
+        const auto &proj = projections[i];
+        
+        StarIdentifier id = proj.first;
+        int px = std::round(proj.second.x);
+        int py = std::round(proj.second.y);
+
+        int curr_threshold = LocalAnnulusThreshold(image, width, height, px, py, halfWin);
+
+        int startX = std::max(0, px - halfWin);
+        int endX = std::min(width - 1, px + halfWin);
+        int startY = std::max(0, py - halfWin);
+        int endY = std::min(height - 1, py + halfWin);
+
+        int boxWidth = endX - startX + 1;
+        int boxHeight = endY - startY + 1;
+
+        std::vector<uint8_t> localVisited(boxWidth * boxHeight, 0);
+        
+        int seedX = -1, seedY = -1;
+        unsigned char maxVal = 0;
+        
+        for (int y = startY; y <= endY; ++y) {
+            int rowOffset = y * width;
+            for (int x = startX; x <= endX; ++x) {
+                unsigned char val = image[rowOffset + x];
+                if (val > maxVal) {
+                    maxVal = val;
+                    seedX = x;
+                    seedY = y;
+                }
+            }
+        }
+
+        if (maxVal < curr_threshold) continue;
+
+        bool isValid = true;
+        uint64_t magSum = 0;
+        uint64_t xCoordMagSum = 0;
+        uint64_t yCoordMagSum = 0;
+        int xMin = seedX, xMax = seedX;
+        int yMin = seedY, yMax = seedY;
+        int pixelCount = 0;
+        
+        stack.push_back({seedX, seedY});
+        localVisited[(seedY - startY) * boxWidth + (seedX - startX)] = 1;
+
+        while (!stack.empty()) {
+            Point curr = stack.back();
+            stack.pop_back();
+            
+            int cx = curr.x;
+            int cy = curr.y;
+            int currIdx = cy * width + cx;
+            
+            if (cx == 0 || cx == width - 1 || cy == 0 || cy == height - 1) {
+                isValid = false;
+            }
+            
+            if (cx < xMin) xMin = cx; else if (cx > xMax) xMax = cx;
+            if (cy < yMin) yMin = cy; else if (cy > yMax) yMax = cy;
+            
+            unsigned char val = image[currIdx];
+            
+
+            uint32_t signal = val - curr_threshold; 
+            
+            magSum += signal;
+            xCoordMagSum += cx * signal;
+            yCoordMagSum += cy * signal;
+            pixelCount++;
+            
+            const Point neighbors[4] = {
+                {cx + 1, cy}, {cx - 1, cy}, {cx, cy + 1}, {cx, cy - 1}
+            };
+            
+            for (int i = 0; i < 4; ++i) {
+                int nx = neighbors[i].x;
+                int ny = neighbors[i].y;
+                
+                if (nx < startX || nx > endX || ny < startY || ny > endY) continue;
+                
+                int localIdx = (ny - startY) * boxWidth + (nx - startX);
+                int globalIdx = ny * width + nx;
+
+                if (localVisited[localIdx] == 0 && image[globalIdx] >= curr_threshold) {
+                    localVisited[localIdx] = 1;
+                    stack.push_back({nx, ny});
+                }
+            }
+        }
+
+        if (isValid && magSum > 0) {
+            int xDiameter = (xMax - xMin) + 1;
+            int yDiameter = (yMax - yMin) + 1;
+            
+            decimal xCoord = (static_cast<decimal>(xCoordMagSum) / static_cast<decimal>(magSum));
+            decimal yCoord = (static_cast<decimal>(yCoordMagSum) / static_cast<decimal>(magSum));
+            
+            foundStars.push_back(Star(
+                xCoord + DECIMAL(0.5), 
+                yCoord + DECIMAL(0.5), 
+                xDiameter / DECIMAL(2.0), 
+                yDiameter / DECIMAL(2.0), 
+                pixelCount
+            ));
+            foundIds.push_back(id);
+        }
+    }
+
+    return {foundIds, foundStars};
+}
+
+
+Stars WindowedCenterOfGravity::Go(unsigned char *, int, int) const {
+
+    return Stars(); // if we dont have a prediction we need to go back to LiS.
+}
 }

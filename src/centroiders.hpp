@@ -50,6 +50,22 @@ class IterativeWeightedCenterOfGravityAlgorithm : public CentroidAlgorithm {
         Stars Go(unsigned char *image, int imageWidth, int imageHeight) const override;
 };
 
+/* Scans small subsets of the entire image, depending on our tracking vector. */
+class WindowedCenterOfGravity : public CentroidAlgorithm {
+public:
+    std::pair<StarIdentifiers, Stars> Go(unsigned char *image, int imageWidth, int imageHeight, 
+             const std::vector<std::pair<StarIdentifier, Vec2>> &predictions) const;
+
+
+    Stars Go(unsigned char *image, int imageWidth, int imageHeight) const override;
+
+    int windowSize = 15;
+
+private:
+    
+    int threshold = 128;
+};
+
 }
 
 #endif
