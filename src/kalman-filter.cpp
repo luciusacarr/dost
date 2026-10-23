@@ -143,7 +143,7 @@ void AttitudeEKF::Update(const Quaternion& q_measured) {
                   S[0][1] * (S[1][0] * S[2][2] - S[1][2] * S[2][0]) +
                   S[0][2] * (S[1][0] * S[2][1] - S[1][1] * S[2][0]);
 
-    if (std::abs(det) < DECIMAL(1e-9)) return;
+    if (!(det > DECIMAL(0.0))) return;  // EXPERIMENT: S is positive definite; the absolute 1e-9 test skipped most updates
 
     decimal invDet = DECIMAL(1.0) / det;
     std::array<std::array<decimal, 3>, 3> Sinv;

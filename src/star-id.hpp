@@ -100,13 +100,29 @@ public:
 
     void UpdateEKF(const Quaternion& measuredAttitude) {
         ekf.Update(measuredAttitude);
+        prevFix = measuredAttitude;  // EXPERIMENT
+        havePrevFix = true;
     }
 
     void ResetEKF(const Quaternion& newGlobalFix) {
         ekf.Reset(newGlobalFix);
+        // EXPERIMENT: two fixes one frame apart give the rate directly, so don't restart from w = 0
+        if (havePrevFix && trackingVector.second > 0) {
+            Quaternion dq = newGlobalFix * prevFix.Conjugate();
+            if (dq.real < 0) dq = Quaternion(-dq.real, -dq.i, -dq.j, -dq.k);
+            decimal dt = trackingVector.second;
+            ekf.w = {2 * dq.i / dt, 2 * dq.j / dt, 2 * dq.k / dt};
+        }
+        prevFix = newGlobalFix;
+        havePrevFix = true;
         isEkfInitialized = true;
         missedFrames = 0;
     }
+
+    // EXPERIMENT: a frame without a fix breaks the one-frame-apart chain
+    void NoteMissedFix() { havePrevFix = false; }
+    Quaternion prevFix;
+    bool havePrevFix = false;
 
     int missedFrames = 0;
 

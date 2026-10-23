@@ -1124,6 +1124,7 @@ PipelineOutput Pipeline::Go(const PipelineInput &input) {
                 tracking_success = true;
             }
         } else if (this->tracking) {
+            if (TrackingMode *tm = dynamic_cast<TrackingMode*>(trackingAlgorithm.get())) tm->NoteMissedFix();  // EXPERIMENT
             // Attitude failed, but we were in tracking mode. Attempt to coast.
             TrackingMode* trackMode = dynamic_cast<TrackingMode*>(trackingAlgorithm.get());
             if (trackMode) {
