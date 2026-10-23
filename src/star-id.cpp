@@ -793,10 +793,10 @@ std::vector<std::pair<StarIdentifier,Vec2>> TrackingMode::GetProjections(
 
     decimal maxVariance = std::max({ekf.P[0][0], ekf.P[1][1], ekf.P[2][2]});
 
-    decimal angularUncertainty = std::sqrt(maxVariance / 20.0); 
+    decimal angularUncertainty = std::sqrt(maxVariance / DECIMAL(20.0)); 
 
     decimal radPerPixel = camera.Fov() / (decimal)camera.XResolution();
-    int dynamicSize = std::ceil((angularUncertainty * 3.0) / radPerPixel);
+    int dynamicSize = std::ceil((angularUncertainty * DECIMAL(3.0)) / radPerPixel);
 
     outWindowSize = std::max(8, std::min(dynamicSize, 51));
 

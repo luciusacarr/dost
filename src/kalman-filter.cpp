@@ -51,15 +51,15 @@ void AttitudeEKF::Predict(decimal dt) {
 
     Quaternion q_delta(
         1.0, 
-        0.5 * w.x * dt, 
-        0.5 * w.y * dt, 
-        0.5 * w.z * dt
+        DECIMAL(0.5) * w.x * dt, 
+        DECIMAL(0.5) * w.y * dt, 
+        DECIMAL(0.5) * w.z * dt
     );
 
     q = q_delta * q;
 
     // normalize
-    decimal invMag = 1.0 / std::sqrt(q.real*q.real + q.i*q.i + q.j*q.j + q.k*q.k);
+    decimal invMag = DECIMAL(1.0) / std::sqrt(q.real*q.real + q.i*q.i + q.j*q.j + q.k*q.k);
     q.real *= invMag;
     q.i *= invMag;
     q.j *= invMag;
@@ -79,7 +79,7 @@ void AttitudeEKF::Predict(decimal dt) {
     for (int i = 0; i < 6; ++i) {
         for (int j = 0; j < 6; ++j) {
             for (int k = 0; k < 6; ++k) {
-                if (Phi[i][k] != 0.0) {
+                if (Phi[i][k] != DECIMAL(0.0)) {
                     Temp[i][j] += Phi[i][k] * P[k][j];
                 }
             }
@@ -92,7 +92,7 @@ void AttitudeEKF::Predict(decimal dt) {
         for (int j = i; j < 6; ++j) {
             decimal sum = 0;
             for (int k = 0; k < 6; ++k) {
-                if (Phi[j][k] != 0.0) { 
+                if (Phi[j][k] != DECIMAL(0.0)) { 
                     // Phi[j][k] acts as Phi^T[k][j]
                     sum += Temp[i][k] * Phi[j][k]; 
                 }
@@ -117,7 +117,7 @@ void AttitudeEKF::Update(const Quaternion& q_measured) {
     Quaternion q_error = q_measured * q.Conjugate();
 
 
-    if (q_error.real < 0.0) {
+    if (q_error.real < DECIMAL(0.0)) {
         q_error.real = -q_error.real;
         q_error.i = -q_error.i;
         q_error.j = -q_error.j;
@@ -126,9 +126,9 @@ void AttitudeEKF::Update(const Quaternion& q_measured) {
 
 
     std::array<decimal, 3> y = {
-        2.0 * q_error.i,
-        2.0 * q_error.j,
-        2.0 * q_error.k
+        DECIMAL(2.0) * q_error.i,
+        DECIMAL(2.0) * q_error.j,
+        DECIMAL(2.0) * q_error.k
     };
 
     std::array<std::array<decimal, 3>, 3> S;
@@ -143,9 +143,9 @@ void AttitudeEKF::Update(const Quaternion& q_measured) {
                   S[0][1] * (S[1][0] * S[2][2] - S[1][2] * S[2][0]) +
                   S[0][2] * (S[1][0] * S[2][1] - S[1][1] * S[2][0]);
 
-    if (std::abs(det) < 1e-9) return;
+    if (std::abs(det) < DECIMAL(1e-9)) return;
 
-    decimal invDet = 1.0 / det;
+    decimal invDet = DECIMAL(1.0) / det;
     std::array<std::array<decimal, 3>, 3> Sinv;
     Sinv[0][0] = (S[1][1] * S[2][2] - S[2][1] * S[1][2]) * invDet;
     Sinv[0][1] = (S[0][2] * S[2][1] - S[0][1] * S[2][2]) * invDet;
@@ -182,15 +182,15 @@ void AttitudeEKF::Update(const Quaternion& q_measured) {
 
     Quaternion q_correction(
         1.0, 
-        0.5 * dx[0], 
-        0.5 * dx[1], 
-        0.5 * dx[2]
+        DECIMAL(0.5) * dx[0], 
+        DECIMAL(0.5) * dx[1], 
+        DECIMAL(0.5) * dx[2]
     );
     
     q = q_correction * q;
     
     // normalize
-    decimal invMag = 1.0 / std::sqrt(q.real*q.real + q.i*q.i + q.j*q.j + q.k*q.k);
+    decimal invMag = DECIMAL(1.0) / std::sqrt(q.real*q.real + q.i*q.i + q.j*q.j + q.k*q.k);
     q.real *= invMag;
     q.i *= invMag;
     q.j *= invMag;
@@ -215,7 +215,7 @@ void AttitudeEKF::Update(const Quaternion& q_measured) {
 
     for (int i = 0; i < 6; ++i) {
         for (int j = i; j < 6; ++j) {
-            P[i][j] = (P_new[i][j] + P_new[j][i]) * 0.5;
+            P[i][j] = (P_new[i][j] + P_new[j][i]) * DECIMAL(0.5);
             P[j][i] = P[i][j];
         }
     }

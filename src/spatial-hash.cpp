@@ -9,9 +9,9 @@ namespace lost {
 
 
 int SpatialHash::VectorToBin(const Vec3 &v) const {
-    int x = static_cast<int>((v.x + 1.0) * 0.5 * GRID_SIZE);
-    int y = static_cast<int>((v.y + 1.0) * 0.5 * GRID_SIZE);
-    int z = static_cast<int>((v.z + 1.0) * 0.5 * GRID_SIZE);
+    int x = static_cast<int>((v.x + DECIMAL(1.0)) * DECIMAL(0.5) * GRID_SIZE);
+    int y = static_cast<int>((v.y + DECIMAL(1.0)) * DECIMAL(0.5) * GRID_SIZE);
+    int z = static_cast<int>((v.z + DECIMAL(1.0)) * DECIMAL(0.5) * GRID_SIZE);
 
     x = std::max(0, std::min(x, GRID_SIZE - 1));
     y = std::max(0, std::min(y, GRID_SIZE - 1));
@@ -60,9 +60,9 @@ void SpatialHash::Build(const Catalog &catalog) {
 }
 
 void SpatialHash::VectorToGridCoords(const Vec3 &v, int &x, int &y, int &z) const {
-    x = static_cast<int>((v.x + 1.0) * 0.5 * GRID_SIZE);
-    y = static_cast<int>((v.y + 1.0) * 0.5 * GRID_SIZE);
-    z = static_cast<int>((v.z + 1.0) * 0.5 * GRID_SIZE);
+    x = static_cast<int>((v.x + DECIMAL(1.0)) * DECIMAL(0.5) * GRID_SIZE);
+    y = static_cast<int>((v.y + DECIMAL(1.0)) * DECIMAL(0.5) * GRID_SIZE);
+    z = static_cast<int>((v.z + DECIMAL(1.0)) * DECIMAL(0.5) * GRID_SIZE);
 
 
     x = std::max(0, std::min(x, GRID_SIZE - 1));
