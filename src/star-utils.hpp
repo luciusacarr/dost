@@ -177,6 +177,9 @@ class CombinationIterator {
 
 struct TetraConstants {
     static constexpr int numPatternStars = 4;
+    // Average number of patterns in a hash bucket of the Tetra database. Larger makes the database
+    // smaller, but star-id then checks more patterns per lookup.
+    static constexpr int patternsPerBucket = 4;
 };
 
 // Check whether all pairs of stars have angular distance within maxFov.

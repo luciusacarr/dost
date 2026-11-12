@@ -60,9 +60,11 @@ size_t TetraFindPatternIndex(const int* patternEdgeRatios,
                              size_t numRatios,
                              int numEdgeRatioBins,
                              size_t tableSize) {
-    const size_t kGoldenRatioHash = 2654435761;
-    size_t index = 0;
-    size_t factor = 1;
+    // 64-bit arithmetic, so that a 32-bit target computes the same index as the machine that
+    // generated the database
+    const uint64_t kGoldenRatioHash = 2654435761;
+    uint64_t index = 0;
+    uint64_t factor = 1;
     for (size_t i = 0; i < numRatios; i++) {
         index += patternEdgeRatios[i] * factor;
         factor *= numEdgeRatioBins;

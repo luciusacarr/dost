@@ -92,19 +92,35 @@ void SerializeTetraDatabase(SerializeContext*,
 // Tetra star pattern = 4 star IDs (Tetra-internal indices)
 using TetraPattern = std::array<uint16_t, TetraConstants::numPatternStars>;
 
+// Number of 32-bit words that hold the packed patterns of a Tetra database
+size_t TetraPatternWords(size_t numPatterns, int patternBits);
+
 /**
  * A database storing Tetra star patterns
  *
+ * Patterns are grouped into hash buckets and stored back to back in bucket order, so the table has
+ * no empty slots. The first star of a pattern is its earliest star in the Tetra catalog, and the
+ * other three are stored as positions in that star's neighbor list (the later Tetra stars within
+ * maxFov of it), which takes far fewer bits than three star indices.
+ *
  * Layout:
- * | size (bytes)                           | name             | description                                    |
- * |----------------------------------------+------------------+------------------------------------------------|
- * | sizeof(decimal)                        | maxFov           | max angle (deg) between any 2 pattern stars    |
- * | sizeof(int32_t)                        | numEdgeRatioBins | number of bins for edge ratio discretization   |
- * | sizeof(uint64_t)                       | patternTableSize | number of slots in pattern hash table          |
- * | sizeof(uint16_t)                       | tetraCatalogSize | number of stars in Tetra preprocessed catalog  |
- * | 4 * patternTableSize * sizeof(uint16_t)| patternTable     | hash table of 4-star patterns                  |
- * | tetraCatalogSize * sizeof(uint16_t)    | catalogIndices   | maps Tetra index to real catalog index         |
- * |----------------------------------------+------------------+------------------------------------------------|
+ * | size (bytes)                 | name              | description                                              |
+ * |------------------------------+-------------------+----------------------------------------------------------|
+ * | sizeof(decimal)              | maxFov            | max angle (deg) between any 2 pattern stars              |
+ * | 4                            | numEdgeRatioBins  | number of bins for edge ratio discretization             |
+ * | 4                            | numBuckets        | number of hash buckets                                   |
+ * | 4                            | numPatterns       | number of patterns                                       |
+ * | 4                            | numNeighbors      | total length of all neighbor lists                       |
+ * | 2                            | tetraCatalogSize  | number of stars in Tetra preprocessed catalog            |
+ * | 1                            | starBits          | bits per Tetra star index in a packed pattern            |
+ * | 1                            | neighborBits      | bits per neighbor list position in a packed pattern      |
+ * | 4 * (numPatterns >> 16)      | bucketBlockStarts | entry h-1: first bucket starting at pattern >= h * 65536 |
+ * | 4 * (tetraCatalogSize + 1)   | neighborStarts    | where each star's neighbor list starts in neighbors      |
+ * | 4 * TetraPatternWords()      | patternWords      | patterns, starBits + 3 * neighborBits bits each          |
+ * | 2 * (numBuckets + 1)         | bucketStartsLow   | low 16 bits of the index of each bucket's first pattern  |
+ * | 2 * numNeighbors             | neighbors         | neighbor lists (Tetra indices), back to back             |
+ * | 2 * tetraCatalogSize         | catalogIndices    | maps Tetra index to real catalog index                   |
+ * |------------------------------+-------------------+----------------------------------------------------------|
  */
 class TetraDatabase {
    public:
@@ -116,15 +132,17 @@ class TetraDatabase {
     // Number of bins used for edge ratio binning
     int NumEdgeRatioBins() const { return numEdgeRatioBins_; }
 
-    // Number of slots in the pattern hash table
-    uint64_t PatternTableSize() const { return patternTableSize_; }
+    // Number of hash buckets the patterns are grouped into
+    uint32_t NumBuckets() const { return numBuckets_; }
 
-    // Get the 4-tuple pattern at index
+    // Number of patterns in the database
+    uint32_t NumPatterns() const { return numPatterns_; }
+
+    // Get the 4-tuple pattern at index, in [0, NumPatterns())
     TetraPattern GetPattern(size_t index) const;
 
-    // Returns a list of patterns from the pattern table
-    // Under the hood, start from index and do quadratic probing
-    std::vector<TetraPattern> GetPatternMatches(size_t index) const;
+    // Returns all the patterns in a bucket, in [0, NumBuckets())
+    std::vector<TetraPattern> GetPatternMatches(size_t bucket) const;
 
     uint16_t CatalogIndex(int tetraCatalogInd) const;
 
@@ -132,11 +150,23 @@ class TetraDatabase {
     static const int32_t kMagicValue;
 
    private:
+    // Index of the first pattern in a bucket. bucket may be NumBuckets(), giving NumPatterns().
+    uint32_t BucketStart(uint32_t bucket) const;
+
     decimal maxFov_;
     int32_t numEdgeRatioBins_;
-    uint64_t patternTableSize_;
+    uint32_t numBuckets_;
+    uint32_t numPatterns_;
+    uint32_t numBucketBlocks_;
     uint16_t tetraCatalogSize_;
-    const uint16_t* patternTable_;
+    int starBits_;
+    int neighborBits_;
+    int patternBits_;
+    const uint32_t* bucketBlockStarts_;
+    const uint32_t* neighborStarts_;
+    const uint32_t* patternWords_;
+    const uint16_t* bucketStartsLow_;
+    const uint16_t* neighbors_;
     const uint16_t* catalogIndices_;
 };
 

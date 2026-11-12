@@ -259,17 +259,51 @@ std::vector<uint16_t> TetraPreprocessCatalog(const Catalog& catalog,
 TetraDatabase::TetraDatabase(DeserializeContext* des) {
     maxFov_ = DeserializePrimitive<decimal>(des);
     numEdgeRatioBins_ = DeserializePrimitive<int32_t>(des);
-    patternTableSize_ = DeserializePrimitive<uint64_t>(des);
+    numBuckets_ = DeserializePrimitive<uint32_t>(des);
+    numPatterns_ = DeserializePrimitive<uint32_t>(des);
+    uint32_t numNeighbors = DeserializePrimitive<uint32_t>(des);
     tetraCatalogSize_ = DeserializePrimitive<uint16_t>(des);
-    patternTable_ =
-        DeserializeArray<uint16_t>(des, TetraConstants::numPatternStars * patternTableSize_);
+    starBits_ = DeserializePrimitive<uint8_t>(des);
+    neighborBits_ = DeserializePrimitive<uint8_t>(des);
+    patternBits_ = starBits_ + (TetraConstants::numPatternStars - 1) * neighborBits_;
+
+    numBucketBlocks_ = numPatterns_ >> 16;
+    bucketBlockStarts_ = DeserializeArray<uint32_t>(des, numBucketBlocks_);
+    neighborStarts_ = DeserializeArray<uint32_t>(des, (long)tetraCatalogSize_ + 1);
+    patternWords_ = DeserializeArray<uint32_t>(des, TetraPatternWords(numPatterns_, patternBits_));
+    bucketStartsLow_ = DeserializeArray<uint16_t>(des, (long)numBuckets_ + 1);
+    neighbors_ = DeserializeArray<uint16_t>(des, numNeighbors);
     catalogIndices_ = DeserializeArray<uint16_t>(des, tetraCatalogSize_);
 }
 
+size_t TetraPatternWords(size_t numPatterns, int patternBits) {
+    // Two words of padding so that a pattern can always be read as three whole words
+    return (numPatterns * patternBits + 31) / 32 + 2;
+}
+
+uint32_t TetraDatabase::BucketStart(uint32_t bucket) const {
+    // The high 16 bits are the number of 65536-pattern blocks that start at or before the bucket
+    const uint32_t* blocksEnd = bucketBlockStarts_ + numBucketBlocks_;
+    uint32_t high = std::upper_bound(bucketBlockStarts_, blocksEnd, bucket) - bucketBlockStarts_;
+    return high << 16 | bucketStartsLow_[bucket];
+}
+
 TetraPattern TetraDatabase::GetPattern(size_t index) const {
+    uint64_t bitPos = (uint64_t)index * patternBits_;
+    size_t word = bitPos >> 5;
+    int shift = bitPos & 31;
+    uint64_t packed = (patternWords_[word] | (uint64_t)patternWords_[word + 1] << 32) >> shift;
+    if (shift + patternBits_ > 64) {
+        packed |= (uint64_t)patternWords_[word + 2] << (64 - shift);
+    }
+
     TetraPattern res;
-    for (int i = 0; i < TetraConstants::numPatternStars; i++) {
-        res[i] = patternTable_[TetraConstants::numPatternStars * index + i];
+    res[0] = packed & ((1u << starBits_) - 1);
+    packed >>= starBits_;
+    const uint16_t* neighbors = neighbors_ + neighborStarts_[res[0]];
+    for (int i = 1; i < TetraConstants::numPatternStars; i++) {
+        res[i] = neighbors[packed & ((1u << neighborBits_) - 1)];
+        packed >>= neighborBits_;
     }
     return res;
 }
@@ -278,18 +312,13 @@ uint16_t TetraDatabase::CatalogIndex(int tetraCatalogInd) const {
     return catalogIndices_[tetraCatalogInd];
 }
 
-std::vector<TetraPattern> TetraDatabase::GetPatternMatches(size_t index) const {
+std::vector<TetraPattern> TetraDatabase::GetPatternMatches(size_t bucket) const {
+    uint32_t start = BucketStart(bucket);
+    uint32_t end = BucketStart(bucket + 1);
     std::vector<TetraPattern> res;
-    for (size_t probeStep = 0; probeStep < PatternTableSize(); probeStep++) {
-        size_t i = (index + probeStep * probeStep) % PatternTableSize();
-
-        TetraPattern tableRow = GetPattern(i);
-
-        if (tableRow[0] == 0 && tableRow[1] == 0) {
-            break;
-        } else {
-            res.push_back(tableRow);
-        }
+    res.reserve(end - start);
+    for (uint32_t i = start; i < end; i++) {
+        res.push_back(GetPattern(i));
     }
     return res;
 }
@@ -371,6 +400,29 @@ std::vector<decimal> PairDistanceKVectorDatabase::StarDistances(int16_t star, co
     return result;
 }
 
+/// Number of bits needed to store any value in [0, numValues)
+static int BitsFor(size_t numValues) {
+    int bits = 1;
+    while (bits < 16 && ((size_t)1 << bits) < numValues) {
+        bits++;
+    }
+    return bits;
+}
+
+/// Smallest prime >= n. A prime number of buckets keeps TetraFindPatternIndex well distributed.
+static uint32_t NextPrime(uint32_t n) {
+    for (n = std::max<uint32_t>(n, 2);; n++) {
+        bool isPrime = true;
+        for (uint32_t d = 2; (uint64_t)d * d <= n; d++) {
+            if (n % d == 0) {
+                isPrime = false;
+                break;
+            }
+        }
+        if (isPrime) return n;
+    }
+}
+
 void SerializeTetraDatabase(SerializeContext* ser,
                             const Catalog& catalog,
                             decimal maxFovDeg,
@@ -386,32 +438,50 @@ void SerializeTetraDatabase(SerializeContext* ser,
         return catalog[catalogPatternStarInds[tetraInd]].spatial;
     };
 
-    // Every star is a pattern star. Each star is marked unavailable after being
-    // used as the first vertex, so each 4-star group is generated exactly once.
-    std::vector<bool> available(numPatternStars, true);
-
-    std::vector<TetraPattern> patterns;
-
+    // Neighbors of a star: the later stars within maxFov of it. Every pattern is generated from
+    // its earliest star, so its other three stars are all neighbors of that star, and each 4-star
+    // group is generated exactly once.
+    std::vector<uint32_t> neighborStarts{0};
+    std::vector<uint16_t> neighbors;
+    size_t maxNeighbors = 0;
     for (size_t firstStarInd = 0; firstStarInd < numPatternStars; firstStarInd++) {
-        available[firstStarInd] = false;
-
         const Vec3& v = spatial(firstStarInd);
-
-        // Find all remaining pattern stars within maxFov
-        std::vector<uint16_t> nearbyStars;
-        for (size_t starId = 0; starId < numPatternStars; starId++) {
-            if (!available[starId]) continue;
+        for (size_t starId = firstStarInd + 1; starId < numPatternStars; starId++) {
             if (v * spatial(starId) > cosMaxFov) {
-                nearbyStars.push_back(starId);
+                neighbors.push_back(starId);
             }
         }
-        CombinationIterator combos(3, nearbyStars.size());
+        maxNeighbors = std::max(maxNeighbors, neighbors.size() - neighborStarts.back());
+        neighborStarts.push_back(neighbors.size());
+    }
+
+    // A pattern is packed as its first star, then the positions of its other three stars in the
+    // first star's neighbor list
+    const int starBits = BitsFor(numPatternStars);
+    const int neighborBits = BitsFor(maxNeighbors);
+    const int patternBits = starBits + (TetraConstants::numPatternStars - 1) * neighborBits;
+
+    auto unpack = [&](uint64_t packed) {
+        TetraPattern patt;
+        patt[0] = packed & ((1u << starBits) - 1);
+        for (int i = 1; i < TetraConstants::numPatternStars; i++) {
+            int pos = packed >> (starBits + (i - 1) * neighborBits) & ((1u << neighborBits) - 1);
+            patt[i] = neighbors[neighborStarts[patt[0]] + pos];
+        }
+        return patt;
+    };
+
+    std::vector<uint64_t> patterns;
+    for (size_t firstStarInd = 0; firstStarInd < numPatternStars; firstStarInd++) {
+        size_t numNeighbors = neighborStarts[firstStarInd + 1] - neighborStarts[firstStarInd];
+        CombinationIterator combos(3, numNeighbors);
         while (combos.next()) {
             const std::vector<int>& idx = combos.indices();
-            TetraPattern patt = {(uint16_t)firstStarInd,
-                                 nearbyStars[idx[0]],
-                                 nearbyStars[idx[1]],
-                                 nearbyStars[idx[2]]};
+            uint64_t packed = firstStarInd;
+            for (int i = 0; i < 3; i++) {
+                packed |= (uint64_t)idx[i] << (starBits + i * neighborBits);
+            }
+            TetraPattern patt = unpack(packed);
 
             bool pattFits = AllPairsWithinFov(
                 TetraConstants::numPatternStars,
@@ -419,16 +489,24 @@ void SerializeTetraDatabase(SerializeContext* ser,
                 cosMaxFov);
 
             if (pattFits) {
-                patterns.push_back(patt);
+                patterns.push_back(packed);
             }
         }
     }
 
     std::cerr << "Tetra found " << patterns.size() << " patterns" << std::endl;
-    // Ensure load factor just < 0.5 to prevent against cycling
-    size_t patternTableSize = 2 * patterns.size() + 1;
-    std::vector<TetraPattern> patternTable(patternTableSize);
-    for (const TetraPattern& patt : patterns) {
+    if ((uint64_t)patterns.size() > UINT32_MAX) {
+        std::cerr << "Too many Tetra patterns for the database format." << std::endl;
+        exit(1);
+    }
+
+    // Hash every pattern to a bucket
+    const uint32_t numBuckets = NextPrime(patterns.size() / TetraConstants::patternsPerBucket);
+    std::vector<uint32_t> patternBuckets;
+    patternBuckets.reserve(patterns.size());
+    std::vector<uint32_t> bucketStarts(numBuckets + 1);
+    for (uint64_t packed : patterns) {
+        TetraPattern patt = unpack(packed);
         std::vector<decimal> edgeRatios = TetraEdgeRatios(
             TetraConstants::numPatternStars, [&](int i) -> const Vec3& { return spatial(patt[i]); });
 
@@ -437,24 +515,61 @@ void SerializeTetraDatabase(SerializeContext* ser,
             binnedEdgeRatios.push_back(int(edgeRatio * numEdgeRatioBins));
         }
 
-        size_t patternInd =
-            TetraFindPatternIndex(binnedEdgeRatios.data(), binnedEdgeRatios.size(), numEdgeRatioBins, patternTableSize);
-        for (size_t probeStep = 0; probeStep < patternTableSize; probeStep++) {
-            size_t index = (patternInd + probeStep * probeStep) % patternTableSize;
-            if (patternTable[index][0] == 0 && patternTable[index][1] == 0) {
-                patternTable[index] = patt;
-                break;
-            }
+        uint32_t bucket = TetraFindPatternIndex(
+            binnedEdgeRatios.data(), binnedEdgeRatios.size(), numEdgeRatioBins, numBuckets);
+        patternBuckets.push_back(bucket);
+        bucketStarts[bucket + 1]++;
+    }
+    for (uint32_t bucket = 0; bucket < numBuckets; bucket++) {
+        bucketStarts[bucket + 1] += bucketStarts[bucket];
+    }
+
+    // Store the patterns back to back in bucket order, patternBits each. There are no empty slots:
+    // bucket b is patterns [bucketStarts[b], bucketStarts[b + 1])
+    std::vector<uint32_t> patternWords(TetraPatternWords(patterns.size(), patternBits));
+    std::vector<uint32_t> nextInBucket(bucketStarts.begin(), bucketStarts.end() - 1);
+    for (size_t i = 0; i < patterns.size(); i++) {
+        uint64_t bitPos = (uint64_t)nextInBucket[patternBuckets[i]]++ * patternBits;
+        size_t word = bitPos >> 5;
+        int shift = bitPos & 31;
+        patternWords[word] |= (uint32_t)(patterns[i] << shift);
+        patternWords[word + 1] |= (uint32_t)(patterns[i] >> (32 - shift));
+        if (shift > 0) {
+            patternWords[word + 2] |= (uint32_t)(patterns[i] >> (64 - shift));
         }
     }
+
+    // Only the low 16 bits of each bucket start are stored per bucket. The high bits come from
+    // bucketBlockStarts: entry h - 1 is the first bucket that starts at or after pattern h * 65536
+    std::vector<uint32_t> bucketBlockStarts;
+    for (uint32_t bucket = 0; bucket <= numBuckets; bucket++) {
+        while (bucketBlockStarts.size() < bucketStarts[bucket] >> 16) {
+            bucketBlockStarts.push_back(bucket);
+        }
+    }
+
     SerializePrimitive<decimal>(ser, maxFovDeg);                       // maxFov_
     SerializePrimitive<int32_t>(ser, numEdgeRatioBins);                // numEdgeRatioBins_
-    SerializePrimitive<uint64_t>(ser, patternTable.size());            // patternTableSize_
+    SerializePrimitive<uint32_t>(ser, numBuckets);                     // numBuckets_
+    SerializePrimitive<uint32_t>(ser, patterns.size());                // numPatterns_
+    SerializePrimitive<uint32_t>(ser, neighbors.size());               // numNeighbors
     SerializePrimitive<uint16_t>(ser, catalogPatternStarInds.size());  // tetraCatalogSize_
-    for (const TetraPattern& patt : patternTable) {
-        for (int i = 0; i < TetraConstants::numPatternStars; i++) {
-            SerializePrimitive<uint16_t>(ser, patt[i]);
-        }
+    SerializePrimitive<uint8_t>(ser, starBits);                        // starBits_
+    SerializePrimitive<uint8_t>(ser, neighborBits);                    // neighborBits_
+    for (uint32_t bucket : bucketBlockStarts) {
+        SerializePrimitive<uint32_t>(ser, bucket);
+    }
+    for (uint32_t start : neighborStarts) {
+        SerializePrimitive<uint32_t>(ser, start);
+    }
+    for (uint32_t word : patternWords) {
+        SerializePrimitive<uint32_t>(ser, word);
+    }
+    for (uint32_t start : bucketStarts) {
+        SerializePrimitive<uint16_t>(ser, start & 0xFFFF);
+    }
+    for (uint16_t neighbor : neighbors) {
+        SerializePrimitive<uint16_t>(ser, neighbor);
     }
     for (uint16_t ind : catalogPatternStarInds) {
         SerializePrimitive<uint16_t>(ser, ind);

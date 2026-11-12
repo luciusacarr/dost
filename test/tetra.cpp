@@ -5,6 +5,9 @@
 #include <catch.hpp>
 
 #include "attitude-utils.hpp"
+#include "databases.hpp"
+#include "io.hpp"
+#include "serialize-helpers.hpp"
 #include "star-utils.hpp"
 
 using namespace lost;  // NOLINT
@@ -161,4 +164,83 @@ TEST_CASE("TetraFindPatternIndex different keys produce different indices", "[te
     size_t idx2 = TetraFindPatternIndex(key2, 5, 50, 10007);
     // Not guaranteed by hash functions, but for these specific inputs should differ
     REQUIRE(idx1 != idx2);
+}
+
+// -- TetraDatabase tests --
+
+TEST_CASE("Tetra database holds every pattern in its hash bucket", "[tetra]") {
+    const Catalog& catalog = CatalogRead();
+    const decimal maxFovDeg = 12;
+    const int numBins = 50;
+    std::vector<uint16_t> starInds = TetraPreprocessCatalog(catalog, maxFovDeg, 3);
+    SerializeContext ser;
+    SerializeTetraDatabase(&ser, catalog, maxFovDeg, starInds, numBins);
+    DeserializeContext des(ser.buffer.data());
+    TetraDatabase db(&des);
+
+    // More than 65536 patterns, so that bucket starts need their high bits
+    REQUIRE(db.NumPatterns() > 100000);
+    REQUIRE(db.MaxFov() == maxFovDeg);
+    REQUIRE(db.NumEdgeRatioBins() == numBins);
+
+    size_t numInBuckets = 0;
+    for (uint32_t bucket = 0; bucket < db.NumBuckets(); bucket++) {
+        numInBuckets += db.GetPatternMatches(bucket).size();
+    }
+    REQUIRE(numInBuckets == db.NumPatterns());
+
+    // Enumerate every group of 4 stars that fits in the FOV, and look it up
+    const decimal cosMaxFov = DECIMAL_COS(DegToRad(maxFovDeg));
+    auto spatial = [&](int i) -> const Vec3& { return catalog[starInds[i]].spatial; };
+    int n = starInds.size();
+    size_t numExpected = 0;
+    size_t numFound = 0;
+    for (int a = 0; a < n; a++) {
+        std::vector<int> near;
+        for (int b = a + 1; b < n; b++) {
+            if (spatial(a) * spatial(b) > cosMaxFov) near.push_back(b);
+        }
+        CombinationIterator combos(3, near.size());
+        while (combos.next()) {
+            const std::vector<int>& idx = combos.indices();
+            TetraPattern patt = {(uint16_t)a,
+                                 (uint16_t)near[idx[0]],
+                                 (uint16_t)near[idx[1]],
+                                 (uint16_t)near[idx[2]]};
+            auto pattSpatial = [&](int i) -> const Vec3& { return spatial(patt[i]); };
+            if (!AllPairsWithinFov(4, pattSpatial, cosMaxFov)) continue;
+            numExpected++;
+
+            std::vector<int> key;
+            for (decimal ratio : TetraEdgeRatios(4, pattSpatial)) {
+                key.push_back(int(ratio * numBins));
+            }
+            size_t bucket = TetraFindPatternIndex(key.data(), key.size(), numBins, db.NumBuckets());
+            std::vector<TetraPattern> matches = db.GetPatternMatches(bucket);
+            if (std::find(matches.begin(), matches.end(), patt) != matches.end()) {
+                numFound++;
+            }
+        }
+    }
+    REQUIRE(numExpected == db.NumPatterns());
+    REQUIRE(numFound == numExpected);
+
+    for (size_t i = 0; i < starInds.size(); i++) {
+        REQUIRE(db.CatalogIndex(i) == starInds[i]);
+    }
+}
+
+TEST_CASE("Tetra database with no patterns", "[tetra]") {
+    Catalog catalog = {CatalogStar(DECIMAL(0.1), DECIMAL(0.2), 100, 1),
+                       CatalogStar(DECIMAL(0.3), DECIMAL(0.2), 200, 2)};
+    std::vector<uint16_t> starInds = TetraPreprocessCatalog(catalog, 12, 10);
+    SerializeContext ser;
+    SerializeTetraDatabase(&ser, catalog, 12, starInds, 50);
+    DeserializeContext des(ser.buffer.data());
+    TetraDatabase db(&des);
+
+    REQUIRE(db.NumPatterns() == 0);
+    for (uint32_t bucket = 0; bucket < db.NumBuckets(); bucket++) {
+        REQUIRE(db.GetPatternMatches(bucket).empty());
+    }
 }

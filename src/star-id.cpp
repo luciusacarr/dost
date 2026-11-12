@@ -173,7 +173,7 @@ StarIdentifiers TetraStarIdAlgorithm::Go(const unsigned char* database,
     DeserializeContext des(databaseBuffer);
     TetraDatabase tetraDatabase(&des);
 
-    const size_t patternTableSize = tetraDatabase.PatternTableSize();
+    const size_t numBuckets = tetraDatabase.NumBuckets();
     const decimal maxFov = tetraDatabase.MaxFov();
     const decimal cosMaxFov = DECIMAL_COS(DegToRad(maxFov));
     const int numEdgeRatioBins = tetraDatabase.NumEdgeRatioBins();
@@ -217,7 +217,7 @@ StarIdentifiers TetraStarIdAlgorithm::Go(const unsigned char* database,
 
         for (const HashCode& code : hashCodes) {
             size_t hashIndex =
-                TetraFindPatternIndex(code.data(), code.size(), numEdgeRatioBins, patternTableSize);
+                TetraFindPatternIndex(code.data(), code.size(), numEdgeRatioBins, numBuckets);
             std::vector<TetraPattern> matches = tetraDatabase.GetPatternMatches(hashIndex);
 
             if (matches.empty()) continue;
