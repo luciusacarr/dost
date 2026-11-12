@@ -168,18 +168,20 @@ TEST_CASE("TetraFindPatternIndex different keys produce different indices", "[te
 
 // -- TetraDatabase tests --
 
-TEST_CASE("Tetra database holds every pattern in its hash bucket", "[tetra]") {
-    const Catalog& catalog = CatalogRead();
-    const decimal maxFovDeg = 12;
+// Build a Tetra database, then enumerate every group of 4 stars that fits in the FOV and require
+// that the database holds exactly those patterns, each in the bucket its edge ratios hash to.
+// Returns the bits per pattern of the database.
+static int CheckTetraDatabaseHoldsEveryPattern(const Catalog& catalog,
+                                               const std::vector<uint16_t>& starInds,
+                                               decimal maxFovDeg,
+                                               size_t minPatterns) {
     const int numBins = 50;
-    std::vector<uint16_t> starInds = TetraPreprocessCatalog(catalog, maxFovDeg, 3);
     SerializeContext ser;
     SerializeTetraDatabase(&ser, catalog, maxFovDeg, starInds, numBins);
     DeserializeContext des(ser.buffer.data());
     TetraDatabase db(&des);
 
-    // More than 65536 patterns, so that bucket starts need their high bits
-    REQUIRE(db.NumPatterns() > 100000);
+    REQUIRE(db.NumPatterns() >= minPatterns);
     REQUIRE(db.MaxFov() == maxFovDeg);
     REQUIRE(db.NumEdgeRatioBins() == numBins);
 
@@ -189,7 +191,6 @@ TEST_CASE("Tetra database holds every pattern in its hash bucket", "[tetra]") {
     }
     REQUIRE(numInBuckets == db.NumPatterns());
 
-    // Enumerate every group of 4 stars that fits in the FOV, and look it up
     const decimal cosMaxFov = DECIMAL_COS(DegToRad(maxFovDeg));
     auto spatial = [&](int i) -> const Vec3& { return catalog[starInds[i]].spatial; };
     int n = starInds.size();
@@ -228,6 +229,56 @@ TEST_CASE("Tetra database holds every pattern in its hash bucket", "[tetra]") {
     for (size_t i = 0; i < starInds.size(); i++) {
         REQUIRE(db.CatalogIndex(i) == starInds[i]);
     }
+    return db.PatternBits();
+}
+
+TEST_CASE("Tetra database holds every pattern in its hash bucket", "[tetra]") {
+    const Catalog& catalog = CatalogRead();
+    const decimal maxFovDeg = 12;
+    std::vector<uint16_t> starInds = TetraPreprocessCatalog(catalog, maxFovDeg, 3);
+    // More than 65536 patterns, so that bucket starts need their high bits
+    CheckTetraDatabaseHoldsEveryPattern(catalog, starInds, maxFovDeg, 100000);
+}
+
+TEST_CASE("Tetra database with patterns wider than a word", "[tetra]") {
+    // A pattern of 35 bits often spans three 32-bit words in the database. The real catalog gives
+    // narrower patterns, so build one that needs 14 bits per star (more than 8192 stars) and 7 bits
+    // per neighbor (a star with more than 64 neighbors).
+    const decimal maxFovDeg = 1;
+    const decimal hubRa = 1, hubDe = DECIMAL(0.3);
+    Catalog catalog;
+    int name = 0;
+
+    // A hub star, and a ring of stars around it at 0.9 degrees. Every ring star is a neighbor of
+    // the hub, but only nearby ring stars are within the FOV of each other, which keeps the number
+    // of patterns small.
+    const int numRingStars = 65;
+    const decimal ringRadius = DegToRad(DECIMAL(0.9));
+    catalog.push_back(CatalogStar(hubRa, hubDe, 100, name++));
+    for (int i = 0; i < numRingStars; i++) {
+        decimal theta = 2 * DECIMAL_M_PI * i / numRingStars;
+        catalog.push_back(CatalogStar(hubRa + ringRadius * DECIMAL_SIN(theta) / DECIMAL_COS(hubDe),
+                                      hubDe + ringRadius * DECIMAL_COS(theta),
+                                      100,
+                                      name++));
+    }
+
+    // Stars spread evenly over the sky (a Fibonacci lattice), about 2 degrees apart, so they add
+    // star indices but almost no patterns
+    const int numSpreadStars = 8200;
+    const decimal goldenAngle = DECIMAL_M_PI * (3 - DECIMAL_SQRT(DECIMAL(5.0)));
+    for (int i = 0; i < numSpreadStars; i++) {
+        decimal z = 1 - (2 * i + DECIMAL(1.0)) / numSpreadStars;
+        catalog.push_back(CatalogStar(
+            goldenAngle * i, DECIMAL_ASIN(z), 100, name++));
+    }
+
+    std::vector<uint16_t> starInds(catalog.size());
+    for (size_t i = 0; i < starInds.size(); i++) {
+        starInds[i] = i;
+    }
+    int patternBits = CheckTetraDatabaseHoldsEveryPattern(catalog, starInds, maxFovDeg, 10000);
+    REQUIRE(patternBits == 35);
 }
 
 TEST_CASE("Tetra database with no patterns", "[tetra]") {

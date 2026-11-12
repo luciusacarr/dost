@@ -15,7 +15,8 @@
 namespace lost {
 
 const int32_t PairDistanceKVectorDatabase::kMagicValue = 0x2536f009;
-const int32_t TetraDatabase::kMagicValue = 0x26683787;
+// Changed from 0x26683787 when the layout changed, so that old databases are not read as new ones
+const int32_t TetraDatabase::kMagicValue = 0x5A1D7E72;
 
 inline bool isFlagSet(uint32_t dbFlags, uint32_t flag) {
    return (dbFlags & flag) != 0;
@@ -270,13 +271,14 @@ TetraDatabase::TetraDatabase(DeserializeContext* des) {
     numBucketBlocks_ = numPatterns_ >> 16;
     bucketBlockStarts_ = DeserializeArray<uint32_t>(des, numBucketBlocks_);
     neighborStarts_ = DeserializeArray<uint32_t>(des, (long)tetraCatalogSize_ + 1);
-    patternWords_ = DeserializeArray<uint32_t>(des, TetraPatternWords(numPatterns_, patternBits_));
+    patternWords_ =
+        DeserializeArray<uint32_t>(des, (long)TetraPatternWords(numPatterns_, patternBits_));
     bucketStartsLow_ = DeserializeArray<uint16_t>(des, (long)numBuckets_ + 1);
     neighbors_ = DeserializeArray<uint16_t>(des, numNeighbors);
     catalogIndices_ = DeserializeArray<uint16_t>(des, tetraCatalogSize_);
 }
 
-size_t TetraPatternWords(size_t numPatterns, int patternBits) {
+uint64_t TetraPatternWords(uint64_t numPatterns, int patternBits) {
     // Two words of padding so that a pattern can always be read as three whole words
     return (numPatterns * patternBits + 31) / 32 + 2;
 }
@@ -526,7 +528,12 @@ void SerializeTetraDatabase(SerializeContext* ser,
 
     // Store the patterns back to back in bucket order, patternBits each. There are no empty slots:
     // bucket b is patterns [bucketStarts[b], bucketStarts[b + 1])
-    std::vector<uint32_t> patternWords(TetraPatternWords(patterns.size(), patternBits));
+    const uint64_t numPatternWords = TetraPatternWords(patterns.size(), patternBits);
+    if (numPatternWords > std::vector<uint32_t>().max_size()) {
+        std::cerr << "Tetra pattern table is too large for this machine." << std::endl;
+        exit(1);
+    }
+    std::vector<uint32_t> patternWords(numPatternWords);
     std::vector<uint32_t> nextInBucket(bucketStarts.begin(), bucketStarts.end() - 1);
     for (size_t i = 0; i < patterns.size(); i++) {
         uint64_t bitPos = (uint64_t)nextInBucket[patternBuckets[i]]++ * patternBits;

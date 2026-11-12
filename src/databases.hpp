@@ -93,7 +93,7 @@ void SerializeTetraDatabase(SerializeContext*,
 using TetraPattern = std::array<uint16_t, TetraConstants::numPatternStars>;
 
 // Number of 32-bit words that hold the packed patterns of a Tetra database
-size_t TetraPatternWords(size_t numPatterns, int patternBits);
+uint64_t TetraPatternWords(uint64_t numPatterns, int patternBits);
 
 /**
  * A database storing Tetra star patterns
@@ -137,6 +137,9 @@ class TetraDatabase {
 
     // Number of patterns in the database
     uint32_t NumPatterns() const { return numPatterns_; }
+
+    // Number of bits each pattern takes in the database
+    int PatternBits() const { return patternBits_; }
 
     // Get the 4-tuple pattern at index, in [0, NumPatterns())
     TetraPattern GetPattern(size_t index) const;
