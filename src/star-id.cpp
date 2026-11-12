@@ -173,11 +173,11 @@ StarIdentifiers TetraStarIdAlgorithm::Go(const unsigned char* database,
     DeserializeContext des(databaseBuffer);
     TetraDatabase tetraDatabase(&des);
 
-    const size_t numBuckets = tetraDatabase.NumBuckets();
-    if (numBuckets == 0) {
-        std::cerr << "Tetra database is corrupt: it has no buckets" << std::endl;
+    if (!tetraDatabase.HeaderIsValid()) {
+        std::cerr << "Tetra database is corrupt" << std::endl;
         return {};
     }
+    const size_t numBuckets = tetraDatabase.NumBuckets();
     const decimal maxFov = tetraDatabase.MaxFov();
     const decimal cosMaxFov = DECIMAL_COS(DegToRad(maxFov));
     const int numEdgeRatioBins = tetraDatabase.NumEdgeRatioBins();

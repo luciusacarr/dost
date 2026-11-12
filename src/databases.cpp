@@ -15,7 +15,6 @@
 namespace lost {
 
 const int32_t PairDistanceKVectorDatabase::kMagicValue = 0x2536f009;
-// Changed from 0x26683787 when the layout changed, so that old databases are not read as new ones
 const int32_t TetraDatabase::kMagicValue = 0x5A1D7E72;
 
 inline bool isFlagSet(uint32_t dbFlags, uint32_t flag) {
@@ -268,26 +267,23 @@ TetraDatabase::TetraDatabase(DeserializeContext* des) {
     neighborBits_ = DeserializePrimitive<uint8_t>(des);
     patternBits_ = starBits_ + (TetraConstants::numPatternStars - 1) * neighborBits_;
 
-    numBucketBlocks_ = numPatterns_ >> 16;
-    bucketBlockStarts_ = DeserializeArray<uint32_t>(des, numBucketBlocks_);
+    bucketStarts_ = DeserializeArray<uint32_t>(des, (long)numBuckets_ + 1);
     neighborStarts_ = DeserializeArray<uint32_t>(des, (long)tetraCatalogSize_ + 1);
     patternWords_ =
         DeserializeArray<uint32_t>(des, (long)TetraPatternWords(numPatterns_, patternBits_));
-    bucketStartsLow_ = DeserializeArray<uint16_t>(des, (long)numBuckets_ + 1);
     neighbors_ = DeserializeArray<uint16_t>(des, numNeighbors);
     catalogIndices_ = DeserializeArray<uint16_t>(des, tetraCatalogSize_);
 }
 
 uint64_t TetraPatternWords(uint64_t numPatterns, int patternBits) {
-    // Two words of padding so that a pattern can always be read as three whole words
+    // Add two words of padding, so that we never reach past the end of the array.
     return (numPatterns * patternBits + 31) / 32 + 2;
 }
 
-uint32_t TetraDatabase::BucketStart(uint32_t bucket) const {
-    // The high 16 bits are the number of 65536-pattern blocks that start at or before the bucket
-    const uint32_t* blocksEnd = bucketBlockStarts_ + numBucketBlocks_;
-    uint32_t high = std::upper_bound(bucketBlockStarts_, blocksEnd, bucket) - bucketBlockStarts_;
-    return high << 16 | bucketStartsLow_[bucket];
+bool TetraDatabase::HeaderIsValid() const {
+    return numBuckets_ > 0 && numEdgeRatioBins_ > 0
+        && starBits_ >= 1 && starBits_ <= 16
+        && neighborBits_ >= 1 && neighborBits_ <= 16;
 }
 
 TetraPattern TetraDatabase::GetPattern(size_t index) const {
@@ -315,8 +311,8 @@ uint16_t TetraDatabase::CatalogIndex(int tetraCatalogInd) const {
 }
 
 std::vector<TetraPattern> TetraDatabase::GetPatternMatches(size_t bucket) const {
-    uint32_t start = BucketStart(bucket);
-    uint32_t end = BucketStart(bucket + 1);
+    uint32_t start = bucketStarts_[bucket];
+    uint32_t end = bucketStarts_[bucket + 1];
     std::vector<TetraPattern> res;
     res.reserve(end - start);
     for (uint32_t i = start; i < end; i++) {
@@ -546,15 +542,6 @@ void SerializeTetraDatabase(SerializeContext* ser,
         }
     }
 
-    // Only the low 16 bits of each bucket start are stored per bucket. The high bits come from
-    // bucketBlockStarts: entry h - 1 is the first bucket that starts at or after pattern h * 65536
-    std::vector<uint32_t> bucketBlockStarts;
-    for (uint32_t bucket = 0; bucket <= numBuckets; bucket++) {
-        while (bucketBlockStarts.size() < bucketStarts[bucket] >> 16) {
-            bucketBlockStarts.push_back(bucket);
-        }
-    }
-
     SerializePrimitive<decimal>(ser, maxFovDeg);                       // maxFov_
     SerializePrimitive<int32_t>(ser, numEdgeRatioBins);                // numEdgeRatioBins_
     SerializePrimitive<uint32_t>(ser, numBuckets);                     // numBuckets_
@@ -563,17 +550,14 @@ void SerializeTetraDatabase(SerializeContext* ser,
     SerializePrimitive<uint16_t>(ser, catalogPatternStarInds.size());  // tetraCatalogSize_
     SerializePrimitive<uint8_t>(ser, starBits);                        // starBits_
     SerializePrimitive<uint8_t>(ser, neighborBits);                    // neighborBits_
-    for (uint32_t bucket : bucketBlockStarts) {
-        SerializePrimitive<uint32_t>(ser, bucket);
+    for (uint32_t start : bucketStarts) {
+        SerializePrimitive<uint32_t>(ser, start);
     }
     for (uint32_t start : neighborStarts) {
         SerializePrimitive<uint32_t>(ser, start);
     }
     for (uint32_t word : patternWords) {
         SerializePrimitive<uint32_t>(ser, word);
-    }
-    for (uint32_t start : bucketStarts) {
-        SerializePrimitive<uint16_t>(ser, start & 0xFFFF);
     }
     for (uint16_t neighbor : neighbors) {
         SerializePrimitive<uint16_t>(ser, neighbor);

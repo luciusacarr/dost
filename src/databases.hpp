@@ -114,10 +114,9 @@ uint64_t TetraPatternWords(uint64_t numPatterns, int patternBits);
  * | 2                            | tetraCatalogSize  | number of stars in Tetra preprocessed catalog            |
  * | 1                            | starBits          | bits per Tetra star index in a packed pattern            |
  * | 1                            | neighborBits      | bits per neighbor list position in a packed pattern      |
- * | 4 * (numPatterns >> 16)      | bucketBlockStarts | entry h-1: first bucket starting at pattern >= h * 65536 |
+ * | 4 * (numBuckets + 1)         | bucketStarts      | index of each bucket's first pattern, then numPatterns   |
  * | 4 * (tetraCatalogSize + 1)   | neighborStarts    | where each star's neighbor list starts in neighbors      |
  * | 4 * TetraPatternWords()      | patternWords      | patterns, starBits + 3 * neighborBits bits each          |
- * | 2 * (numBuckets + 1)         | bucketStartsLow   | low 16 bits of the index of each bucket's first pattern  |
  * | 2 * numNeighbors             | neighbors         | neighbor lists (Tetra indices), back to back             |
  * | 2 * tetraCatalogSize         | catalogIndices    | maps Tetra index to real catalog index                   |
  * |------------------------------+-------------------+----------------------------------------------------------|
@@ -125,6 +124,10 @@ uint64_t TetraPatternWords(uint64_t numPatterns, int patternBits);
 class TetraDatabase {
    public:
     explicit TetraDatabase(DeserializeContext* des);
+
+    // False if the header holds values that no generated database has (a corrupt or foreign
+    // database). Check before using the rest of the database.
+    bool HeaderIsValid() const;
 
     // Max FOV (in degrees) allowed between stars in the same pattern
     decimal MaxFov() const { return maxFov_; }
@@ -153,22 +156,17 @@ class TetraDatabase {
     static const int32_t kMagicValue;
 
    private:
-    // Index of the first pattern in a bucket. bucket may be NumBuckets(), giving NumPatterns().
-    uint32_t BucketStart(uint32_t bucket) const;
-
     decimal maxFov_;
     int32_t numEdgeRatioBins_;
     uint32_t numBuckets_;
     uint32_t numPatterns_;
-    uint32_t numBucketBlocks_;
     uint16_t tetraCatalogSize_;
     int starBits_;
     int neighborBits_;
     int patternBits_;
-    const uint32_t* bucketBlockStarts_;
+    const uint32_t* bucketStarts_;
     const uint32_t* neighborStarts_;
     const uint32_t* patternWords_;
-    const uint16_t* bucketStartsLow_;
     const uint16_t* neighbors_;
     const uint16_t* catalogIndices_;
 };

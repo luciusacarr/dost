@@ -236,7 +236,7 @@ TEST_CASE("Tetra database holds every pattern in its hash bucket", "[tetra]") {
     const Catalog& catalog = CatalogRead();
     const decimal maxFovDeg = 12;
     std::vector<uint16_t> starInds = TetraPreprocessCatalog(catalog, maxFovDeg, 3);
-    // More than 65536 patterns, so that bucket starts need their high bits
+    // The real catalog, with enough patterns to fill many buckets
     CheckTetraDatabaseHoldsEveryPattern(catalog, starInds, maxFovDeg, 100000);
 }
 
@@ -293,5 +293,25 @@ TEST_CASE("Tetra database with no patterns", "[tetra]") {
     REQUIRE(db.NumPatterns() == 0);
     for (uint32_t bucket = 0; bucket < db.NumBuckets(); bucket++) {
         REQUIRE(db.GetPatternMatches(bucket).empty());
+    }
+}
+
+TEST_CASE("Tetra database header check rejects bad bit widths", "[tetra]") {
+    Catalog catalog = {CatalogStar(DECIMAL(0.1), DECIMAL(0.2), 100, 1),
+                       CatalogStar(DECIMAL(0.3), DECIMAL(0.2), 200, 2)};
+    std::vector<uint16_t> starInds = TetraPreprocessCatalog(catalog, 12, 10);
+    SerializeContext ser;
+    SerializeTetraDatabase(&ser, catalog, 12, starInds, 50);
+    {
+        DeserializeContext des(ser.buffer.data());
+        REQUIRE(TetraDatabase(&des).HeaderIsValid());
+    }
+
+    // starBits is the byte after maxFov, numEdgeRatioBins, three 32-bit counts and tetraCatalogSize
+    const size_t starBitsOffset = sizeof(decimal) + 4 + 3 * 4 + 2;
+    ser.buffer[starBitsOffset] |= 0x20;
+    {
+        DeserializeContext des(ser.buffer.data());
+        REQUIRE(!TetraDatabase(&des).HeaderIsValid());
     }
 }
